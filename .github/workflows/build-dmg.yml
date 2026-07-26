@@ -1,0 +1,56 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build universal DMG
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          version="0.2.${GITHUB_RUN_NUMBER}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            candidate="${GITHUB_REF_NAME#v}"
+            if [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              version="$candidate"
+            fi
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Run state-machine checks
+        run: make test
+
+      - name: Build universal DMG
+        env:
+          BUILD_ARCHS: arm64 x86_64
+        run: ./Scripts/create-dmg.sh
+
+      - name: Verify package
+        shell: bash
+        run: |
+          lipo -archs dist/ShiftInput.app/Contents/MacOS/ShiftInput
+          codesign --verify --deep --strict dist/ShiftInput.app
+          hdiutil verify "dist/ShiftInput-${VERSION}.dmg"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShiftInput-${{ env.VERSION }}-macOS
+          path: dist/ShiftInput-${{ env.VERSION }}.dmg
+          if-no-files-found: error
