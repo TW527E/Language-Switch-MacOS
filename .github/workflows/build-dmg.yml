@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run state-machine checks
         run: make test
@@ -85,7 +85,7 @@ jobs:
           hdiutil verify "dist/ShiftInput-${VERSION}.dmg"
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
           path: dist/ShiftInput-${{ needs.metadata.outputs.version }}.dmg
@@ -107,12 +107,12 @@ jobs:
 
     steps:
       - name: Check out repository history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download DMG
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
           path: dist
