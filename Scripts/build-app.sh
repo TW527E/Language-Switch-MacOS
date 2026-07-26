@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIGURATION="${CONFIGURATION:-release}"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "$ROOT/VERSION")}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 BUILD_ARCHS="${BUILD_ARCHS:-}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"

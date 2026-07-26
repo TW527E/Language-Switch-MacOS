@@ -82,10 +82,11 @@ make verify
 
 - 推送到 `main`。
 - 创建 Pull Request。
-- 推送 `v*` 版本标签。
 - 手动运行 workflow。
 
 流程会执行检查、创建 `arm64 + x86_64` Universal Binary、封装 DMG、验证磁盘映像，最后作为 GitHub Actions artifact 上传。
+
+要发布新版本，请修改根目录 `VERSION` 中的语义化版本号（例如 `0.3.0`），提交并推送到 `main`。构建成功后，workflow 会自动创建对应的 `v0.3.0` 标签和 GitHub Release、附上 DMG，并在 Release 说明中列出自上一个版本以来的所有 commits。已存在的版本标签不会被覆盖。
 
 ## 技术设计
 
@@ -100,6 +101,7 @@ make verify
 
 ```text
 .github/workflows/build-dmg.yml  GitHub Actions DMG 构建
+VERSION                          应用程序与 Release 版本号
 Sources/ShiftInputCore/          可测试的纯 Swift 逻辑
 Sources/ShiftInput/              AppKit 应用与系统集成
 Resources/AppIcon.png            应用图标 1024px 主图

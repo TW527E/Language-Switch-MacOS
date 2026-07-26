@@ -1,9 +1,8 @@
-name: Build macOS DMG
+name: Build and release macOS DMG
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -11,8 +10,54 @@ permissions:
   contents: read
 
 jobs:
+  metadata:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      version_changed: ${{ steps.metadata.outputs.version_changed }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and detect changes
+        id: metadata
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must contain a semantic version such as 0.3.0" >&2
+            exit 1
+          fi
+
+          tag="v$version"
+          version_changed=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+              version_changed=true
+            elif ! git diff --quiet "$BEFORE_SHA" "$GITHUB_SHA" -- VERSION; then
+              version_changed=true
+            fi
+          fi
+
+          if [[ "$version_changed" == "true" ]] && git rev-parse --verify --quiet "refs/tags/$tag"; then
+            echo "$tag already exists. Increase VERSION before publishing another release." >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build universal DMG
+    needs: metadata
     runs-on: macos-15
     timeout-minutes: 20
 
@@ -20,28 +65,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve version
-        shell: bash
-        run: |
-          version="0.2.${GITHUB_RUN_NUMBER}"
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            candidate="${GITHUB_REF_NAME#v}"
-            if [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              version="$candidate"
-            fi
-          fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-
       - name: Run state-machine checks
         run: make test
 
       - name: Build universal DMG
         env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
           BUILD_ARCHS: arm64 x86_64
         run: ./Scripts/create-dmg.sh
 
       - name: Verify package
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
         shell: bash
         run: |
           lipo -archs dist/ShiftInput.app/Contents/MacOS/ShiftInput
@@ -51,6 +87,78 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: ShiftInput-${{ env.VERSION }}-macOS
-          path: dist/ShiftInput-${{ env.VERSION }}.dmg
+          name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
+          path: dist/ShiftInput-${{ needs.metadata.outputs.version }}.dmg
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.metadata.outputs.version_changed == 'true'
+    needs: [metadata, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: shiftinput-release
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
+          path: dist
+
+      - name: Generate release notes from every commit
+        env:
+          TAG: ${{ needs.metadata.outputs.tag }}
+        shell: bash
+        run: |
+          previous_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${GITHUB_SHA}^" 2>/dev/null || true)"
+
+          {
+            echo "## Changes"
+            echo
+            if [[ -n "$previous_tag" ]]; then
+              range="${previous_tag}..${GITHUB_SHA}"
+              echo "All commits since \`$previous_tag\`:"
+            else
+              range="$GITHUB_SHA"
+              echo "All commits included in this release:"
+            fi
+            echo
+
+            while IFS=$'\x1f' read -r full_hash short_hash subject author; do
+              printf -- '- [`%s`](https://github.com/%s/commit/%s) %s — %s\n' \
+                "$short_hash" "$GITHUB_REPOSITORY" "$full_hash" "$subject" "$author"
+            done < <(git log --reverse --format='%H%x1f%h%x1f%s%x1f%an' "$range")
+
+            if [[ -n "$previous_tag" ]]; then
+              echo
+              echo "**Full comparison:** https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${TAG}"
+            fi
+          } > release-notes.md
+
+          cat release-notes.md
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.metadata.outputs.tag }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG" \
+            "dist/ShiftInput-${VERSION}.dmg" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ShiftInput $TAG" \
+            --notes-file release-notes.md

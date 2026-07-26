@@ -82,10 +82,11 @@ make verify
 
 - Pushes to `main`.
 - Pull requests.
-- `v*` version tags.
 - Manual workflow dispatches.
 
 The workflow runs checks, builds an `arm64 + x86_64` Universal Binary, packages and verifies a DMG, and uploads it as a GitHub Actions artifact.
+
+To publish a new version, change the semantic version in the root `VERSION` file (for example, `0.3.0`), commit it, and push it to `main`. After a successful build, the workflow automatically creates the matching `v0.3.0` tag and GitHub Release, attaches the DMG, and lists every commit since the previous version in the release notes. Existing version tags are never overwritten.
 
 ## Technical design
 
@@ -100,6 +101,7 @@ The workflow runs checks, builds an `arm64 + x86_64` Universal Binary, packages 
 
 ```text
 .github/workflows/build-dmg.yml  GitHub Actions DMG build
+VERSION                          Application and Release version
 Sources/ShiftInputCore/          Testable pure-Swift logic
 Sources/ShiftInput/              AppKit application and system integration
 Resources/AppIcon.png            1024px application icon master
