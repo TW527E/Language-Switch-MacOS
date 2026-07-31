@@ -10,6 +10,7 @@ ShiftInput is a lightweight, event-driven, native macOS enhancement for switchin
 
 - Tap `Shift` by itself to switch from the current input source to the most recently used English input source.
 - When English is active, tap `Shift` again to restore the previously used input source.
+- When returning to Apple Pinyin, ShiftInput waits for the Pinyin keyboard layout to activate and retries if macOS has not finished switching, preventing a Pinyin indicator with Latin-only typing.
 - A macOS-style input-source HUD appears after switching.
 - Typing uppercase letters, modifier shortcuts, Shift-clicking, and Shift-scrolling do not trigger a switch.
 
@@ -24,6 +25,7 @@ The two shortcuts can be enabled or disabled independently in Settings.
 
 ## Other settings
 
+- Disable macOS's built-in Caps Lock switching between Latin and non-Latin input sources; this stays synchronized with System Settings → Keyboard → Text Input.
 - Show the menu bar icon; enabled by default.
 - Show the Dock icon; disabled by default.
 - If both icons are hidden, open ShiftInput again from Finder to return to Settings.
@@ -47,20 +49,20 @@ make test
 # Create dist/ShiftInput.app
 make app
 
-# Create dist/ShiftInput-0.2.0.dmg
+# Create dist/ShiftInput-0.2.1.dmg
 make dmg
 ```
 
 Build a Universal Binary for both Apple Silicon and Intel:
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.2.0 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=0.2.1 make dmg
 ```
 
 Other supported build parameters:
 
 ```bash
-VERSION=0.2.0 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=0.2.1 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 Run all local verification:
@@ -93,7 +95,8 @@ To publish a new version, change the semantic version in the root `VERSION` file
 - Swift, AppKit, Core Graphics, and Text Input Source Services.
 - `CGEventTap` processes only the required keyboard and pointer events.
 - System input-source notifications replace continuous polling.
-- `TISSelectInputSource` performs input-source changes and the previous source is persisted.
+- `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed, including the active keyboard layout for Apple Pinyin, and retried when necessary.
+- The Caps Lock option synchronizes macOS's Latin/non-Latin input-source switch state directly and disables itself safely if a future system removes that capability.
 - `Shift + Space` is forwarded as Apple's native `Option + Shift + H` command only when Apple Pinyin is detected.
 - A timed-out event tap recovers automatically; monitoring stops if permissions are revoked.
 

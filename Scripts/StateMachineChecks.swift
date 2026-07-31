@@ -66,6 +66,10 @@ enum StateMachineChecks {
             id: "com.apple.inputmethod.SCIM.ITABC",
             localizedName: "Pinyin – Simplified"
         ), "Simplified Pinyin is supported")
+        expect(PinyinInputSourceClassifier.isApplePinyin(
+            id: "com.apple.keylayout.TraditionalPinyinKeyboard",
+            localizedName: "Pinyin – Traditional"
+        ), "Traditional Pinyin keyboard layout activation is recognized")
         expect(!PinyinInputSourceClassifier.isApplePinyin(
             id: "com.apple.inputmethod.TCIM.Zhuyin",
             localizedName: "Zhuyin – Traditional"

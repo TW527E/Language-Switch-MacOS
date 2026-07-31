@@ -9,7 +9,12 @@ if [[ ! -d "$APP" ]]; then
     exit 1
 fi
 
-open -n "$APP" --args -shiftToggleEnabled false -pinyinWidthToggleEnabled false -hasLaunchedBefore true
+open -n "$APP" --args \
+    -shiftToggleEnabled false \
+    -pinyinWidthToggleEnabled false \
+    -showStatusItem true \
+    -showDockIcon false \
+    -hasLaunchedBefore true
 
 PID=""
 for _ in {1..20}; do

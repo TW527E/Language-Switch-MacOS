@@ -29,6 +29,7 @@ final class InputSourceManager: NSObject {
 
     private let settings: SettingsStore
     private let notificationName = Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String)
+    private var switchInProgress = false
     private(set) var currentSourceSupportsPinyinWidthToggle = false
 
     init(settings: SettingsStore) {
@@ -53,7 +54,15 @@ final class InputSourceManager: NSObject {
         return descriptor(for: source)
     }
 
-    func toggleEnglishAndPrevious() -> ToggleResult {
+    /// Delays selection until the Shift-up event has propagated to the old
+    /// input method, then confirms that macOS has activated the destination.
+    /// This prevents Apple Pinyin from occasionally receiving an unmatched
+    /// Shift-up while it is still finishing activation and remaining in a
+    /// Latin-only state.
+    @discardableResult
+    func toggleEnglishAndPrevious(completion: @escaping (ToggleResult) -> Void) -> Bool {
+        guard !switchInProgress else { return false }
+
         let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
         let english = TISCopyCurrentASCIICapableKeyboardInputSource().takeRetainedValue()
         let currentID = stringProperty(current, key: kTISPropertyInputSourceID) ?? ""
@@ -61,15 +70,18 @@ final class InputSourceManager: NSObject {
 
         if currentID == englishID {
             guard let previous = previousNonEnglishSource(excluding: englishID) else {
-                return .unavailable("尚未記錄可返回的輸入法")
+                completion(.unavailable("尚未記錄可返回的輸入法"))
+                return true
             }
-            return select(previous)
+            beginConfirmedSelection(of: previous, completion: completion)
+            return true
         }
 
         if !currentID.isEmpty {
             settings.lastNonEnglishSourceID = currentID
         }
-        return select(english)
+        beginConfirmedSelection(of: english, completion: completion)
+        return true
     }
 
     @objc private func inputSourceDidChange(_ notification: Notification) {
@@ -131,12 +143,91 @@ final class InputSourceManager: NSObject {
         return sources.first
     }
 
-    private func select(_ source: TISInputSource) -> ToggleResult {
+    private func beginConfirmedSelection(
+        of source: TISInputSource,
+        completion: @escaping (ToggleResult) -> Void
+    ) {
+        switchInProgress = true
+        let expectedID = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+        let descriptor = descriptor(for: source)
+        let expectsPinyin = PinyinInputSourceClassifier.isApplePinyin(
+            id: descriptor.id,
+            localizedName: descriptor.name
+        )
+
+        // The event tap callback runs before the Shift-up reaches the active
+        // app and input method. A short delay keeps that release associated
+        // with the old source without adding perceptible switching latency.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
+            self?.selectAndConfirm(
+                source,
+                expectedID: expectedID,
+                expectsPinyin: expectsPinyin,
+                retriesRemaining: 3,
+                completion: completion
+            )
+        }
+    }
+
+    private func selectAndConfirm(
+        _ source: TISInputSource,
+        expectedID: String,
+        expectsPinyin: Bool,
+        retriesRemaining: Int,
+        completion: @escaping (ToggleResult) -> Void
+    ) {
         let status = TISSelectInputSource(source)
         guard status == noErr else {
-            return .unavailable("輸入法切換失敗（錯誤 \(status)）")
+            finishSwitch(
+                with: .unavailable("輸入法切換失敗（錯誤 \(status)）"),
+                completion: completion
+            )
+            return
         }
-        return .switched(descriptor(for: source))
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.035) { [weak self] in
+            guard let self else { return }
+            if self.selectionIsConfirmed(expectedID: expectedID, expectsPinyin: expectsPinyin) {
+                self.finishSwitch(with: .switched(self.currentDescriptor), completion: completion)
+            } else if retriesRemaining > 0 {
+                self.selectAndConfirm(
+                    source,
+                    expectedID: expectedID,
+                    expectsPinyin: expectsPinyin,
+                    retriesRemaining: retriesRemaining - 1,
+                    completion: completion
+                )
+            } else {
+                self.finishSwitch(
+                    with: .unavailable("輸入法未完成切換，請再試一次"),
+                    completion: completion
+                )
+            }
+        }
+    }
+
+    private func selectionIsConfirmed(expectedID: String, expectsPinyin: Bool) -> Bool {
+        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        guard stringProperty(current, key: kTISPropertyInputSourceID) == expectedID else {
+            return false
+        }
+        guard expectsPinyin else { return true }
+
+        // For Apple Pinyin, the input source ID may change before its Pinyin
+        // keyboard layout is ready. Waiting for both prevents the UI from
+        // claiming success while keystrokes are still handled as Latin text.
+        let layout = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
+        let layoutID = stringProperty(layout, key: kTISPropertyInputSourceID) ?? ""
+        let layoutName = stringProperty(layout, key: kTISPropertyLocalizedName) ?? ""
+        return PinyinInputSourceClassifier.isApplePinyin(id: layoutID, localizedName: layoutName)
+    }
+
+    private func finishSwitch(
+        with result: ToggleResult,
+        completion: @escaping (ToggleResult) -> Void
+    ) {
+        switchInProgress = false
+        completion(result)
     }
 
     private func descriptor(for source: TISInputSource) -> InputSourceDescriptor {

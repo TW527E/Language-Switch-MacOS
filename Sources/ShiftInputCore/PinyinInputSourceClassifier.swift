@@ -4,7 +4,7 @@ public enum PinyinInputSourceClassifier {
     public static func isApplePinyin(id: String, localizedName: String) -> Bool {
         let normalizedID = id.lowercased()
         let normalizedName = localizedName.lowercased()
-        return normalizedID.contains(".pinyin")
+        return normalizedID.contains("pinyin")
             || normalizedID == "com.apple.inputmethod.scim.itabc"
             || normalizedName.contains("pinyin")
             || normalizedName.contains("拼音")

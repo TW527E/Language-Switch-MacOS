@@ -10,6 +10,7 @@ ShiftInput 是一个原生、轻量且事件驱动的 macOS 输入法切换增�
 
 - 单独点按 `Shift`，从当前输入法切换到最近使用的英文输入法。
 - 已在英文输入法时，再次点按 `Shift` 会返回上次使用的输入法。
+- 返回 Apple 拼音时会等待并确认拼音键盘布局已启用；如果 macOS 尚未完成切换，会自动重试，避免显示为拼音却只能输入英文。
 - 切换后显示 macOS 风格的输入来源提示。
 - Shift 用于输入大写字母、组合快捷键、Shift 点击或 Shift 滚动时不会误触发。
 
@@ -24,6 +25,7 @@ ShiftInput 是一个原生、轻量且事件驱动的 macOS 输入法切换增�
 
 ## 其他设置
 
+- 可以停用 macOS 内置的 Caps Lock 拉丁／非拉丁输入法切换；此开关会与“系统设置 → 键盘 → 文字输入”同步。
 - 显示菜单栏图标，默认开启。
 - 显示 Dock 图标，默认关闭。
 - 如果同时隐藏两个图标，再次从 Finder 打开 ShiftInput 即可返回设置。
@@ -47,20 +49,20 @@ make test
 # 创建 dist/ShiftInput.app
 make app
 
-# 创建 dist/ShiftInput-0.2.0.dmg
+# 创建 dist/ShiftInput-0.2.1.dmg
 make dmg
 ```
 
 创建同时支持 Apple Silicon 和 Intel 的 Universal Binary：
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.2.0 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=0.2.1 make dmg
 ```
 
 其他可用参数：
 
 ```bash
-VERSION=0.2.0 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=0.2.1 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 运行完整验证：
@@ -93,7 +95,8 @@ make verify
 - Swift、AppKit、Core Graphics、Text Input Source Services。
 - `CGEventTap` 只处理必要的键盘和指针事件。
 - 使用系统输入来源通知，不持续轮询输入法状态。
-- 使用 `TISSelectInputSource` 切换输入法并保存上次来源。
+- 使用 `TISSelectInputSource` 切换输入法并保存上次来源；切换后会确认实际来源，Apple 拼音也会确认其键盘布局并在需要时重试。
+- Caps Lock 开关直接同步 macOS 的拉丁／非拉丁输入来源切换状态；如果未来系统不再提供相关能力，该开关会安全停用。
 - `Shift + Space` 仅在识别为 Apple 拼音时转发为原生 `Option + Shift + H` 命令。
 - Event tap 超时停用时会自动恢复；权限被撤销时会停止监听。
 

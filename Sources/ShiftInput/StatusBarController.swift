@@ -1,16 +1,22 @@
 import AppKit
 
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSMenuDelegate {
     var onOpenPreferences: (() -> Void)?
     var onRetryPermission: (() -> Void)?
 
     private let settings: SettingsStore
+    private let capsLockLanguageSwitch: CapsLockLanguageSwitchController
     private var statusItem: NSStatusItem?
     private var currentSource: InputSourceDescriptor
     private var accessibilityGranted = false
 
-    init(settings: SettingsStore, initialSource: InputSourceDescriptor) {
+    init(
+        settings: SettingsStore,
+        capsLockLanguageSwitch: CapsLockLanguageSwitchController,
+        initialSource: InputSourceDescriptor
+    ) {
         self.settings = settings
+        self.capsLockLanguageSwitch = capsLockLanguageSwitch
         self.currentSource = initialSource
         super.init()
         applyVisibility()
@@ -54,6 +60,7 @@ final class StatusBarController: NSObject {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
         let sourceItem = NSMenuItem(title: "目前：\(currentSource.name)", action: nil, keyEquivalent: "")
         sourceItem.isEnabled = false
         menu.addItem(sourceItem)
@@ -67,6 +74,17 @@ final class StatusBarController: NSObject {
         widthToggle.target = self
         widthToggle.state = settings.pinyinWidthToggleEnabled ? .on : .off
         menu.addItem(widthToggle)
+
+        if capsLockLanguageSwitch.isAvailable {
+            let capsLockToggle = NSMenuItem(
+                title: "停用 macOS Caps Lock 中／英文切換",
+                action: #selector(toggleCapsLockLanguageSwitch(_:)),
+                keyEquivalent: ""
+            )
+            capsLockToggle.target = self
+            capsLockToggle.state = capsLockLanguageSwitch.isSystemLanguageSwitchEnabled ? .off : .on
+            menu.addItem(capsLockToggle)
+        }
 
         if !accessibilityGranted {
             let permission = NSMenuItem(title: "完成鍵盤監聽權限設定…", action: #selector(retryPermission), keyEquivalent: "")
@@ -91,6 +109,29 @@ final class StatusBarController: NSObject {
 
     @objc private func togglePinyinWidth(_ sender: NSMenuItem) {
         settings.pinyinWidthToggleEnabled.toggle()
+    }
+
+    @objc private func toggleCapsLockLanguageSwitch(_ sender: NSMenuItem) {
+        let shouldDisable = sender.state != .on
+        if !capsLockLanguageSwitch.setSystemLanguageSwitchEnabled(!shouldDisable) {
+            NSSound.beep()
+        }
+        sender.state = capsLockLanguageSwitch.isSystemLanguageSwitchEnabled ? .off : .on
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        for item in menu.items {
+            switch item.action {
+            case #selector(toggleShift(_:)):
+                item.state = settings.shiftToggleEnabled ? .on : .off
+            case #selector(togglePinyinWidth(_:)):
+                item.state = settings.pinyinWidthToggleEnabled ? .on : .off
+            case #selector(toggleCapsLockLanguageSwitch(_:)):
+                item.state = capsLockLanguageSwitch.isSystemLanguageSwitchEnabled ? .off : .on
+            default:
+                break
+            }
+        }
     }
 
     @objc private func retryPermission() {

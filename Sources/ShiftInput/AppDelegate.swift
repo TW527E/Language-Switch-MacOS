@@ -2,11 +2,19 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore.shared
+    private let capsLockLanguageSwitch = CapsLockLanguageSwitchController()
     private lazy var inputSources = InputSourceManager(settings: settings)
     private let keyboardMonitor = GlobalKeyboardMonitor()
     private let hud = InputSourceHUDController()
-    private lazy var statusBar = StatusBarController(settings: settings, initialSource: inputSources.currentDescriptor)
-    private lazy var preferences = PreferencesWindowController(settings: settings)
+    private lazy var statusBar = StatusBarController(
+        settings: settings,
+        capsLockLanguageSwitch: capsLockLanguageSwitch,
+        initialSource: inputSources.currentDescriptor
+    )
+    private lazy var preferences = PreferencesWindowController(
+        settings: settings,
+        capsLockLanguageSwitch: capsLockLanguageSwitch
+    )
     private var settingsObserver: NSObjectProtocol?
     private var workspaceObserver: NSObjectProtocol?
 
@@ -74,12 +82,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         keyboardMonitor.onShiftTap = { [weak self] in
             guard let self, self.settings.shiftToggleEnabled else { return }
-            switch self.inputSources.toggleEnglishAndPrevious() {
-            case .switched(let source):
-                self.statusBar.update(source: source)
-                self.hud.show(source: source)
-            case .unavailable:
-                NSSound.beep()
+            self.inputSources.toggleEnglishAndPrevious { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .switched(let source):
+                    self.statusBar.update(source: source)
+                    self.hud.show(source: source)
+                case .unavailable:
+                    NSSound.beep()
+                }
             }
         }
         keyboardMonitor.shouldHandleWidthToggle = { [weak self] in
