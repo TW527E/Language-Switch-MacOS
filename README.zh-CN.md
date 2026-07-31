@@ -25,7 +25,6 @@ ShiftInput 是一个原生、轻量且事件驱动的 macOS 输入法切换增�
 
 ## 其他设置
 
-- 可以停用 macOS 内置的 Caps Lock 拉丁／非拉丁输入法切换；此开关会与“系统设置 → 键盘 → 文字输入”同步。
 - 显示菜单栏图标，默认开启。
 - 显示 Dock 图标，默认关闭。
 - 如果同时隐藏两个图标，再次从 Finder 打开 ShiftInput 即可返回设置。
@@ -94,11 +93,13 @@ make verify
 
 - Swift、AppKit、Core Graphics、Text Input Source Services。
 - `CGEventTap` 只处理必要的键盘和指针事件。
+- 事件监听范围会根据已启用的快捷键调整；未启用 Shift 切换时不监听鼠标和滚动事件。
 - 使用系统输入来源通知，不持续轮询输入法状态。
+- 每次输入来源通知只读取一次系统快照，并一致地更新保存来源、拼音能力和界面。
 - 使用 `TISSelectInputSource` 切换输入法并保存上次来源；切换后会确认实际来源，Apple 拼音也会确认其键盘布局并在需要时重试。
-- Caps Lock 开关直接同步 macOS 的拉丁／非拉丁输入来源切换状态；如果未来系统不再提供相关能力，该开关会安全停用。
 - `Shift + Space` 仅在识别为 Apple 拼音时转发为原生 `Option + Shift + H` 命令。
 - Event tap 超时停用时会自动恢复；权限被撤销时会停止监听。
+- 快捷键设置改变或 event tap 被系统停用时，监听器会使用最新设置安全重建。
 
 ## 项目结构
 

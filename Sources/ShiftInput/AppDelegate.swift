@@ -2,19 +2,11 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore.shared
-    private let capsLockLanguageSwitch = CapsLockLanguageSwitchController()
     private lazy var inputSources = InputSourceManager(settings: settings)
     private let keyboardMonitor = GlobalKeyboardMonitor()
     private let hud = InputSourceHUDController()
-    private lazy var statusBar = StatusBarController(
-        settings: settings,
-        capsLockLanguageSwitch: capsLockLanguageSwitch,
-        initialSource: inputSources.currentDescriptor
-    )
-    private lazy var preferences = PreferencesWindowController(
-        settings: settings,
-        capsLockLanguageSwitch: capsLockLanguageSwitch
-    )
+    private lazy var statusBar = StatusBarController(settings: settings, initialSource: inputSources.currentDescriptor)
+    private lazy var preferences = PreferencesWindowController(settings: settings)
     private var settingsObserver: NSObjectProtocol?
     private var workspaceObserver: NSObjectProtocol?
 
@@ -101,7 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             GlobalKeyboardMonitor.postNativeChineseWidthShortcut()
         }
         keyboardMonitor.onTapDisabled = { [weak self] in
-            self?.refreshPermissionUI()
+            DispatchQueue.main.async {
+                self?.refreshKeyboardMonitor()
+                self?.refreshPermissionUI()
+            }
         }
         statusBar.onOpenPreferences = { [weak self] in self?.preferences.showAndActivate() }
         statusBar.onRetryPermission = { [weak self] in self?.requestAndRefreshPermission() }
@@ -124,8 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyboardMonitor.stop()
             return
         }
-        if !keyboardMonitor.isRunning {
-            _ = keyboardMonitor.start()
+        let configuration = GlobalKeyboardMonitor.Configuration(
+            shiftToggleEnabled: settings.shiftToggleEnabled,
+            pinyinWidthToggleEnabled: settings.pinyinWidthToggleEnabled
+        )
+        if !keyboardMonitor.isRunning || keyboardMonitor.configuration != configuration {
+            _ = keyboardMonitor.start(configuration: configuration)
         }
     }
 

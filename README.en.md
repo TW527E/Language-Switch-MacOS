@@ -25,7 +25,6 @@ The two shortcuts can be enabled or disabled independently in Settings.
 
 ## Other settings
 
-- Disable macOS's built-in Caps Lock switching between Latin and non-Latin input sources; this stays synchronized with System Settings → Keyboard → Text Input.
 - Show the menu bar icon; enabled by default.
 - Show the Dock icon; disabled by default.
 - If both icons are hidden, open ShiftInput again from Finder to return to Settings.
@@ -94,11 +93,13 @@ To publish a new version, change the semantic version in the root `VERSION` file
 
 - Swift, AppKit, Core Graphics, and Text Input Source Services.
 - `CGEventTap` processes only the required keyboard and pointer events.
+- The event mask follows the enabled shortcuts; mouse and scroll events are not monitored when Shift switching is disabled.
 - System input-source notifications replace continuous polling.
+- Each input-source notification uses one system snapshot to update persistence, Pinyin capability, and UI consistently.
 - `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed, including the active keyboard layout for Apple Pinyin, and retried when necessary.
-- The Caps Lock option synchronizes macOS's Latin/non-Latin input-source switch state directly and disables itself safely if a future system removes that capability.
 - `Shift + Space` is forwarded as Apple's native `Option + Shift + H` command only when Apple Pinyin is detected.
 - A timed-out event tap recovers automatically; monitoring stops if permissions are revoked.
+- Shortcut changes or a system-disabled event tap rebuild the monitor safely with the latest configuration.
 
 ## Project layout
 

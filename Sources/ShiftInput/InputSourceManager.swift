@@ -41,8 +41,9 @@ final class InputSourceManager: NSObject {
             name: notificationName,
             object: nil
         )
-        rememberCurrentSourceIfNeeded()
-        updatePinyinWidthSupport()
+        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        rememberCurrentSourceIfNeeded(current)
+        updatePinyinWidthSupport(for: current)
     }
 
     deinit {
@@ -85,16 +86,19 @@ final class InputSourceManager: NSObject {
     }
 
     @objc private func inputSourceDidChange(_ notification: Notification) {
-        rememberCurrentSourceIfNeeded()
-        updatePinyinWidthSupport()
-        let descriptor = currentDescriptor
+        // Use one snapshot for persistence, feature detection, and UI updates.
+        // Besides avoiding repeated TIS queries, this prevents a rapid external
+        // source change from producing a descriptor and capability mismatch.
+        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        rememberCurrentSourceIfNeeded(current)
+        updatePinyinWidthSupport(for: current)
+        let descriptor = descriptor(for: current)
         DispatchQueue.main.async { [weak self] in
             self?.onInputSourceChanged?(descriptor)
         }
     }
 
-    private func updatePinyinWidthSupport() {
-        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+    private func updatePinyinWidthSupport(for source: TISInputSource) {
         let id = (stringProperty(source, key: kTISPropertyInputSourceID) ?? "").lowercased()
         let name = (stringProperty(source, key: kTISPropertyLocalizedName) ?? "").lowercased()
         currentSourceSupportsPinyinWidthToggle = PinyinInputSourceClassifier.isApplePinyin(
@@ -103,8 +107,7 @@ final class InputSourceManager: NSObject {
         )
     }
 
-    private func rememberCurrentSourceIfNeeded() {
-        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+    private func rememberCurrentSourceIfNeeded(_ current: TISInputSource) {
         let english = TISCopyCurrentASCIICapableKeyboardInputSource().takeRetainedValue()
         guard let currentID = stringProperty(current, key: kTISPropertyInputSourceID),
               let englishID = stringProperty(english, key: kTISPropertyInputSourceID),

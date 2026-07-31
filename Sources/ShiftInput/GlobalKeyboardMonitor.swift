@@ -2,6 +2,11 @@ import ApplicationServices
 import ShiftInputCore
 
 final class GlobalKeyboardMonitor {
+    struct Configuration: Equatable {
+        let shiftToggleEnabled: Bool
+        let pinyinWidthToggleEnabled: Bool
+    }
+
     var onShiftTap: (() -> Void)?
     var shouldHandleWidthToggle: (() -> Bool)?
     var onWidthToggle: (() -> Void)?
@@ -10,6 +15,7 @@ final class GlobalKeyboardMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var state = ShiftGestureStateMachine()
+    private(set) var configuration: Configuration?
 
     private static let leftShiftKeyCode: UInt16 = 56
     private static let rightShiftKeyCode: UInt16 = 60
@@ -21,13 +27,23 @@ final class GlobalKeyboardMonitor {
     }
 
     @discardableResult
-    func start() -> Bool {
-        guard eventTap == nil else { return isRunning }
+    func start(configuration: Configuration) -> Bool {
+        if eventTap != nil {
+            if isRunning, self.configuration == configuration {
+                return true
+            }
+            stop()
+        }
 
-        let types: [CGEventType] = [
-            .flagsChanged, .keyDown, .keyUp,
-            .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel
-        ]
+        var types: [CGEventType] = [.flagsChanged, .keyDown]
+        if configuration.pinyinWidthToggleEnabled {
+            types.append(.keyUp)
+        }
+        if configuration.shiftToggleEnabled {
+            types.append(contentsOf: [
+                .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel
+            ])
+        }
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else { return Unmanaged.passUnretained(event) }
@@ -49,6 +65,7 @@ final class GlobalKeyboardMonitor {
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         eventTap = tap
         runLoopSource = source
+        self.configuration = configuration
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         return true
@@ -63,6 +80,7 @@ final class GlobalKeyboardMonitor {
         }
         runLoopSource = nil
         eventTap = nil
+        configuration = nil
         state.reset()
     }
 
