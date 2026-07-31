@@ -48,20 +48,20 @@ make test
 # Create dist/ShiftInput.app
 make app
 
-# Create dist/ShiftInput-0.2.1.dmg
+# Create dist/ShiftInput-0.2.2.dmg
 make dmg
 ```
 
 Build a Universal Binary for both Apple Silicon and Intel:
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.2.1 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=0.2.2 make dmg
 ```
 
 Other supported build parameters:
 
 ```bash
-VERSION=0.2.1 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=0.2.2 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 Run all local verification:
