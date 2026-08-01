@@ -8,6 +8,7 @@ final class GlobalKeyboardMonitor {
     }
 
     var onShiftTap: (() -> Void)?
+    var shouldHandleShiftTap: (() -> Bool)?
     var shouldHandleWidthToggle: (() -> Bool)?
     var onWidthToggle: (() -> Void)?
     var onTapDisabled: (() -> Void)?
@@ -107,7 +108,7 @@ final class GlobalKeyboardMonitor {
             let action = isShiftKey
                 ? state.shiftFlagsChanged(keyCode: keyCode, hasOtherModifiers: !otherFlags.isEmpty)
                 : state.otherModifierChanged()
-            if action == .toggleInputSource {
+            if action == .toggleInputSource, shouldHandleShiftTap?() ?? true {
                 DispatchQueue.main.async { [weak self] in self?.onShiftTap?() }
             }
 

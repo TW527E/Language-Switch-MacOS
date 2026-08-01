@@ -23,6 +23,13 @@ ShiftInput is a lightweight, event-driven, native macOS enhancement for switchin
 
 The two shortcuts can be enabled or disabled independently in Settings.
 
+### Remote-app and game bypass
+
+- `Shift` and `Shift + Space` pass through by default in common remote-desktop, streaming, and game applications so ShiftInput does not intercept them.
+- Automatic detection covers common remote apps, the macOS game category, and Steam, GOG, and Epic game paths.
+- Add other apps to the Settings list and control the `Shift` and `Shift + Space` bypasses independently.
+- Newly added apps bypass both shortcuts by default; the menu-bar menu can also add the current app quickly.
+
 ## Other settings
 
 - Show the menu bar icon; enabled by default.
@@ -48,20 +55,20 @@ make test
 # Create dist/ShiftInput.app
 make app
 
-# Create dist/ShiftInput-0.2.2.dmg
+# Create dist/ShiftInput-0.3.0.dmg
 make dmg
 ```
 
 Build a Universal Binary for both Apple Silicon and Intel:
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.2.2 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=0.3.0 make dmg
 ```
 
 Other supported build parameters:
 
 ```bash
-VERSION=0.2.2 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=0.3.0 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 Run all local verification:
@@ -98,6 +105,7 @@ To publish a new version, change the semantic version in the root `VERSION` file
 - Each input-source notification uses one system snapshot to update persistence, Pinyin capability, and UI consistently.
 - `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed, including the active keyboard layout for Apple Pinyin, and retried when necessary.
 - `Shift + Space` is forwarded as Apple's native `Option + Shift + H` command only when Apple Pinyin is detected.
+- Foreground-app metadata is refreshed only when the active app changes; remote-app and game bypass checks do not poll windows or processes.
 - A timed-out event tap recovers automatically; monitoring stops if permissions are revoked.
 - Shortcut changes or a system-disabled event tap rebuild the monitor safely with the latest configuration.
 
