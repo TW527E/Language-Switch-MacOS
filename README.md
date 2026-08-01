@@ -23,6 +23,13 @@ ShiftInput 是一個原生、輕量且事件驅動的 macOS 輸入法切換增�
 
 以上兩項功能可在設定中分別啟用或停用。
 
+### 遠端軟體與遊戲放行
+
+- 預設在常見遠端桌面、串流軟體及遊戲中，同時放行 `Shift` 與 `Shift + Space`，避免快捷鍵被 ShiftInput 攔截。
+- 自動辨識常見遠端軟體、macOS 遊戲分類，以及 Steam、GOG、Epic 遊戲路徑。
+- 可在設定的應用程式列表中加入其他 App，並分別開關 `Shift` 與 `Shift + Space` 放行規則。
+- 新加入的 App 預設同時放行兩項快捷鍵；選單列選單也能快速加入目前 App。
+
 ## 其他設定
 
 - 顯示選單列圖標，預設開啟。
@@ -48,20 +55,20 @@ make test
 # 建立 dist/ShiftInput.app
 make app
 
-# 建立 dist/ShiftInput-0.2.2.dmg
+# 建立 dist/ShiftInput-0.3.0.dmg
 make dmg
 ```
 
 建立同時支援 Apple Silicon 與 Intel 的 Universal Binary：
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.2.2 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=0.3.0 make dmg
 ```
 
 其他可用參數：
 
 ```bash
-VERSION=0.2.2 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=0.3.0 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 執行完整驗證：
@@ -98,6 +105,7 @@ make verify
 - 每次輸入來源通知只讀取一次系統快照，並一致地更新保存來源、拼音能力與介面。
 - 使用 `TISSelectInputSource` 切換輸入法並保存上次來源；切換後會確認實際來源，Apple 拼音亦會確認其鍵盤配置並在需要時重試。
 - `Shift + Space` 僅在辨識為 Apple 拼音時轉送為原生 `Option + Shift + H` 命令。
+- 前景 App 改變時才更新應用程式資料；遠端軟體與遊戲放行判斷不輪詢窗口或程序。
 - Event tap 逾時停用時會自動恢復；權限被撤銷時會停止監聽。
 - 快捷鍵設定改變或 event tap 被系統停用時，監聽器會以最新設定安全重建。
 

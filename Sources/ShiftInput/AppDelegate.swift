@@ -1,4 +1,5 @@
 import AppKit
+import ShiftInputCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore.shared
@@ -9,9 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var preferences = PreferencesWindowController(settings: settings)
     private var settingsObserver: NSObjectProtocol?
     private var workspaceObserver: NSObjectProtocol?
+    private var foregroundApplication: ForegroundApplicationInfo?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let isFirstLaunch = settings.consumeFirstLaunch()
+        rememberForegroundApplication(NSWorkspace.shared.frontmostApplication)
         configureApplicationMenu()
         applyDockVisibility()
         configureCallbacks()
@@ -29,7 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            self?.rememberForegroundApplication(application)
             self?.refreshKeyboardMonitor()
             self?.refreshPermissionUI()
             self?.preferences.refresh()
@@ -85,9 +90,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        keyboardMonitor.shouldHandleShiftTap = { [weak self] in
+            guard let self, self.settings.shiftToggleEnabled else { return false }
+            return !self.shouldBypassShortcut(manualBundleIDs: self.settings.shiftExcludedBundleIDs)
+        }
         keyboardMonitor.shouldHandleWidthToggle = { [weak self] in
             guard let self, self.settings.pinyinWidthToggleEnabled else { return false }
-            return self.inputSources.currentSourceSupportsPinyinWidthToggle
+            guard self.inputSources.currentSourceSupportsPinyinWidthToggle else { return false }
+            return !self.shouldBypassShortcut(manualBundleIDs: self.settings.pinyinWidthExcludedBundleIDs)
         }
         keyboardMonitor.onWidthToggle = {
             GlobalKeyboardMonitor.postNativeChineseWidthShortcut()
@@ -100,7 +110,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusBar.onOpenPreferences = { [weak self] in self?.preferences.showAndActivate() }
         statusBar.onRetryPermission = { [weak self] in self?.requestAndRefreshPermission() }
+        statusBar.foregroundApplicationProvider = { [weak self] in self?.foregroundApplication }
         preferences.onRetryPermission = { [weak self] in self?.requestAndRefreshPermission() }
+    }
+
+    private func shouldBypassShortcut(manualBundleIDs: Set<String>) -> Bool {
+        guard let application = foregroundApplication else { return false }
+        return ApplicationBypassPolicy.shouldBypass(
+            bundleIdentifier: application.bundleIdentifier,
+            localizedName: application.localizedName,
+            bundlePath: application.bundlePath,
+            applicationCategory: application.applicationCategory,
+            excludedBundleIdentifiers: manualBundleIDs,
+            automaticBypassEnabled: settings.automaticallyBypassRemoteAppsAndGames
+        )
+    }
+
+    private func rememberForegroundApplication(_ application: NSRunningApplication?) {
+        guard let application,
+              let info = ForegroundApplicationInfo(runningApplication: application) else { return }
+        foregroundApplication = info
     }
 
     private func settingsDidChange() {
@@ -108,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar.applyVisibility()
         refreshKeyboardMonitor()
         refreshPermissionUI()
+        preferences.refresh()
     }
 
     private func refreshKeyboardMonitor() {

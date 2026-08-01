@@ -5,7 +5,7 @@ build:
 
 test:
 	mkdir -p .build/checks
-	swiftc Sources/ShiftInputCore/*.swift Scripts/StateMachineChecks.swift -o .build/checks/state-machine-checks
+	swiftc Sources/ShiftInputCore/*.swift Sources/ShiftInput/SettingsStore.swift Scripts/StateMachineChecks.swift -o .build/checks/state-machine-checks
 	.build/checks/state-machine-checks
 
 app:
