@@ -56,20 +56,20 @@ make test
 # 创建 dist/ShiftInput.app
 make app
 
-# 创建 dist/ShiftInput-0.3.0.dmg
+# 创建 dist/ShiftInput-1.0.0.dmg
 make dmg
 ```
 
 创建同时支持 Apple Silicon 和 Intel 的 Universal Binary：
 
 ```bash
-BUILD_ARCHS="arm64 x86_64" VERSION=0.3.0 make dmg
+BUILD_ARCHS="arm64 x86_64" VERSION=1.0.0 make dmg
 ```
 
 其他可用参数：
 
 ```bash
-VERSION=0.3.0 BUILD_NUMBER=2 CONFIGURATION=release make app
+VERSION=1.0.0 BUILD_NUMBER=2 CONFIGURATION=release make app
 ```
 
 运行完整验证：
