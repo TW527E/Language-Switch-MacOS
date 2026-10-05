@@ -17,6 +17,7 @@ final class SettingsStore {
         static let shortcutBypassRulesVersion = "shortcutBypassRulesVersion"
         static let showStatusItem = "showStatusItem"
         static let showDockIcon = "showDockIcon"
+        static let showCenterHUDAsFallback = "showCenterHUDAsFallback"
         static let lastNonEnglishSourceID = "lastNonEnglishSourceID"
         static let hasLaunchedBefore = "hasLaunchedBefore"
     }
@@ -35,7 +36,8 @@ final class SettingsStore {
             Key.shiftExcludedBundleIDs: [String](),
             Key.pinyinWidthExcludedBundleIDs: [String](),
             Key.showStatusItem: true,
-            Key.showDockIcon: false
+            Key.showDockIcon: false,
+            Key.showCenterHUDAsFallback: false
         ])
         // The first local test build only stored Shift + Space exclusions.
         // Promote those entries to the new default of bypassing both shortcuts.
@@ -115,6 +117,11 @@ final class SettingsStore {
     var showDockIcon: Bool {
         get { defaults.bool(forKey: Key.showDockIcon) }
         set { set(newValue, forKey: Key.showDockIcon) }
+    }
+
+    var showCenterHUDAsFallback: Bool {
+        get { defaults.bool(forKey: Key.showCenterHUDAsFallback) }
+        set { set(newValue, forKey: Key.showCenterHUDAsFallback) }
     }
 
     var lastNonEnglishSourceID: String? {

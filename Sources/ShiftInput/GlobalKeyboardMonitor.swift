@@ -1,4 +1,5 @@
 import ApplicationServices
+import Carbon
 import ShiftInputCore
 
 final class GlobalKeyboardMonitor {
@@ -16,6 +17,9 @@ final class GlobalKeyboardMonitor {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var state = ShiftGestureStateMachine()
+    private var deferredEvents = DeferredInputEventBuffer<CGEvent>()
+    private var deferredKeyCodes: Set<UInt16> = []
+    private var deferralGeneration = 0
     private(set) var configuration: Configuration?
 
     private static let leftShiftKeyCode: UInt16 = 56
@@ -37,7 +41,7 @@ final class GlobalKeyboardMonitor {
         }
 
         var types: [CGEventType] = [.flagsChanged, .keyDown]
-        if configuration.pinyinWidthToggleEnabled {
+        if configuration.pinyinWidthToggleEnabled || configuration.shiftToggleEnabled {
             types.append(.keyUp)
         }
         if configuration.shiftToggleEnabled {
@@ -83,6 +87,45 @@ final class GlobalKeyboardMonitor {
         eventTap = nil
         configuration = nil
         state.reset()
+        finishDeferringInput()
+    }
+
+    /// Releases keystrokes held while an input-source switch was confirmed,
+    /// in their original order, so they reach the destination input method.
+    func finishDeferringInput() {
+        let events = deferredEvents.finish()
+        deferredKeyCodes.removeAll(keepingCapacity: true)
+        for event in events {
+            event.setIntegerValueField(.eventSourceUserData, value: Self.syntheticMarker)
+            event.post(tap: .cgSessionEventTap)
+        }
+    }
+
+    private func beginDeferringInput() {
+        guard deferredEvents.begin() else { return }
+        deferralGeneration += 1
+        let generation = deferralGeneration
+        // Input must never stay held if a switch fails to report completion.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, self.deferralGeneration == generation else { return }
+            self.finishDeferringInput()
+        }
+    }
+
+    /// Holds plain text keys and Shift; shortcuts pass so they are never
+    /// delayed. Shift is held with its letter because a Shift that arrives
+    /// alone looks like a bare tap, which Pinyin uses for its own
+    /// Chinese/English toggle.
+    private func deferIfSwitching(event: CGEvent, keyCode: UInt16, isRelease: Bool) -> Bool {
+        guard deferredEvents.isActive else { return false }
+        if isRelease {
+            guard deferredKeyCodes.contains(keyCode) else { return false }
+        } else if !event.flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty {
+            return false
+        }
+        guard let copy = event.copy(), deferredEvents.appendIfActive(copy) else { return false }
+        deferredKeyCodes.insert(keyCode)
+        return true
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -105,11 +148,24 @@ final class GlobalKeyboardMonitor {
         case .flagsChanged:
             let isShiftKey = keyCode == Self.leftShiftKeyCode || keyCode == Self.rightShiftKeyCode
             let otherFlags = event.flags.intersection([.maskCommand, .maskControl, .maskAlternate])
+            // Device-dependent flag bits tell which Shift key is down; events
+            // from tools that omit them fall back to the combined Shift flag.
+            let deviceShiftBits = event.flags.rawValue & 0x6
+            let shiftBit: UInt64 = keyCode == Self.leftShiftKeyCode ? 0x2 : 0x4
+            let isShiftDown = deviceShiftBits == 0
+                ? event.flags.contains(.maskShift)
+                : deviceShiftBits & shiftBit != 0
             let action = isShiftKey
-                ? state.shiftFlagsChanged(keyCode: keyCode, hasOtherModifiers: !otherFlags.isEmpty)
+                ? state.shiftFlagsChanged(keyCode: keyCode, isDown: isShiftDown, hasOtherModifiers: !otherFlags.isEmpty)
                 : state.otherModifierChanged()
-            if action == .toggleInputSource, shouldHandleShiftTap?() ?? true {
+            // Secure input (password fields) hides letter keys from event
+            // taps, so a capital letter would be indistinguishable from a tap.
+            if action == .toggleInputSource, !IsSecureEventInputEnabled(), shouldHandleShiftTap?() ?? true {
+                beginDeferringInput()
                 DispatchQueue.main.async { [weak self] in self?.onShiftTap?() }
+            }
+            if isShiftKey, deferIfSwitching(event: event, keyCode: keyCode, isRelease: !isShiftDown) {
+                return nil
             }
 
         case .keyDown:
@@ -122,9 +178,15 @@ final class GlobalKeyboardMonitor {
                 DispatchQueue.main.async { [weak self] in self?.onWidthToggle?() }
                 return nil
             }
+            if deferIfSwitching(event: event, keyCode: keyCode, isRelease: false) {
+                return nil
+            }
 
         case .keyUp:
             if state.keyUp(keyCode: keyCode) == .consume {
+                return nil
+            }
+            if deferIfSwitching(event: event, keyCode: keyCode, isRelease: true) {
                 return nil
             }
 

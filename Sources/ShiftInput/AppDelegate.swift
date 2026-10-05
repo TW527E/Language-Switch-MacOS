@@ -78,13 +78,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.statusBar.update(source: source)
         }
         keyboardMonitor.onShiftTap = { [weak self] in
-            guard let self, self.settings.shiftToggleEnabled else { return }
+            guard let self, self.settings.shiftToggleEnabled else {
+                self?.keyboardMonitor.finishDeferringInput()
+                return
+            }
+            // A switch already in progress keeps the active deferral and
+            // releases it from its own completion.
             self.inputSources.toggleEnglishAndPrevious { [weak self] result in
                 guard let self else { return }
+                self.keyboardMonitor.finishDeferringInput()
                 switch result {
-                case .switched(let source):
+                case .switched(let source, let nativeIndicatorShown):
                     self.statusBar.update(source: source)
-                    self.hud.show(source: source)
+                    if !nativeIndicatorShown, self.settings.showCenterHUDAsFallback {
+                        self.hud.show(source: source)
+                    }
                 case .unavailable:
                     NSSound.beep()
                 }

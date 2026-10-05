@@ -21,7 +21,7 @@ struct InputSourceDescriptor: Equatable {
 
 final class InputSourceManager: NSObject {
     enum ToggleResult {
-        case switched(InputSourceDescriptor)
+        case switched(InputSourceDescriptor, nativeIndicatorShown: Bool)
         case unavailable(String)
     }
 
@@ -59,7 +59,7 @@ final class InputSourceManager: NSObject {
     /// input method, then confirms that macOS has activated the destination.
     /// This prevents Apple Pinyin from occasionally receiving an unmatched
     /// Shift-up while it is still finishing activation and remaining in a
-    /// Latin-only state.
+    /// Latin-only state. Returns false when a switch is already in progress.
     @discardableResult
     func toggleEnglishAndPrevious(completion: @escaping (ToggleResult) -> Void) -> Bool {
         guard !switchInProgress else { return false }
@@ -127,7 +127,7 @@ final class InputSourceManager: NSObject {
             kTISPropertyInputSourceIsEnabled: kCFBooleanTrue as Any,
             kTISPropertyInputSourceIsSelectCapable: kCFBooleanTrue as Any
         ]
-        let sources = TISCreateInputSourceList(filter as CFDictionary, false).takeRetainedValue() as! [TISInputSource]
+        let sources = TISCreateInputSourceList(filter as CFDictionary, false)?.takeRetainedValue() as? [TISInputSource] ?? []
         return sources.first { source in
             guard stringProperty(source, key: kTISPropertyInputSourceID) != englishID else { return false }
             return arrayProperty(source, key: kTISPropertyInputSourceLanguages)?.contains {
@@ -142,7 +142,7 @@ final class InputSourceManager: NSObject {
             kTISPropertyInputSourceIsEnabled: kCFBooleanTrue as Any,
             kTISPropertyInputSourceIsSelectCapable: kCFBooleanTrue as Any
         ]
-        let sources = TISCreateInputSourceList(filter as CFDictionary, false).takeRetainedValue() as! [TISInputSource]
+        let sources = TISCreateInputSourceList(filter as CFDictionary, false)?.takeRetainedValue() as? [TISInputSource] ?? []
         return sources.first
     }
 
@@ -152,31 +152,20 @@ final class InputSourceManager: NSObject {
     ) {
         switchInProgress = true
         let expectedID = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
-        let descriptor = descriptor(for: source)
-        let expectsPinyin = PinyinInputSourceClassifier.isApplePinyin(
-            id: descriptor.id,
-            localizedName: descriptor.name
-        )
 
         // The event tap callback runs before the Shift-up reaches the active
-        // app and input method. A short delay keeps that release associated
-        // with the old source without adding perceptible switching latency.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
-            self?.selectAndConfirm(
-                source,
-                expectedID: expectedID,
-                expectsPinyin: expectsPinyin,
-                retriesRemaining: 3,
-                completion: completion
-            )
+        // app and input method. Delaying selection keeps that release with
+        // the old source; keystrokes typed meanwhile are deferred by the
+        // keyboard monitor, so the delay costs no input.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.select(source, expectedID: expectedID, reselectionsRemaining: 2, completion: completion)
         }
     }
 
-    private func selectAndConfirm(
+    private func select(
         _ source: TISInputSource,
         expectedID: String,
-        expectsPinyin: Bool,
-        retriesRemaining: Int,
+        reselectionsRemaining: Int,
         completion: @escaping (ToggleResult) -> Void
     ) {
         let status = TISSelectInputSource(source)
@@ -187,20 +176,67 @@ final class InputSourceManager: NSObject {
             )
             return
         }
+        confirmSelection(
+            of: source,
+            expectedID: expectedID,
+            pollsRemaining: 10,
+            reselectionsRemaining: reselectionsRemaining,
+            completion: completion
+        )
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.035) { [weak self] in
+    /// Polls until the destination is current and selected. A source that is
+    /// already current but still activating is never selected again, since
+    /// repeated selection is what leaves Apple Pinyin showing its icon while
+    /// producing Latin text.
+    private func confirmSelection(
+        of source: TISInputSource,
+        expectedID: String,
+        pollsRemaining: Int,
+        reselectionsRemaining: Int,
+        completion: @escaping (ToggleResult) -> Void
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
             guard let self else { return }
-            if self.selectionIsConfirmed(expectedID: expectedID, expectsPinyin: expectsPinyin) {
-                self.finishSwitch(with: .switched(self.currentDescriptor), completion: completion)
-            } else if retriesRemaining > 0 {
-                self.selectAndConfirm(
-                    source,
+            let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+            let decision = InputSourceSelectionPolicy.decision(
+                expectedID: expectedID,
+                currentID: self.stringProperty(current, key: kTISPropertyInputSourceID),
+                isSelected: self.boolProperty(source, key: kTISPropertyInputSourceIsSelected)
+            )
+            switch decision {
+            case .confirmed:
+                let descriptor = self.descriptor(for: current)
+                let isCJKV = self.boolProperty(source, key: kTISPropertyInputSourceIsASCIICapable) == false
+                self.waitForNativeIndicator(pollsRemaining: 6) { shown in
+                    // The focused app draws the indicator once it has adopted
+                    // the new source. The focus hand-off would dismiss it and
+                    // flickers the window, so it only runs for a text input
+                    // that never showed the indicator.
+                    guard isCJKV, !shown, self.focusedElementAcceptsText() else {
+                        self.finishSwitch(with: .switched(descriptor, nativeIndicatorShown: shown), completion: completion)
+                        return
+                    }
+                    self.refreshFocusedInputContext {
+                        self.finishSwitch(with: .switched(descriptor, nativeIndicatorShown: false), completion: completion)
+                    }
+                }
+            case .waitForSelection where pollsRemaining > 0:
+                self.confirmSelection(
+                    of: source,
                     expectedID: expectedID,
-                    expectsPinyin: expectsPinyin,
-                    retriesRemaining: retriesRemaining - 1,
+                    pollsRemaining: pollsRemaining - 1,
+                    reselectionsRemaining: reselectionsRemaining,
                     completion: completion
                 )
-            } else {
+            case .retrySelection where reselectionsRemaining > 0:
+                self.select(
+                    source,
+                    expectedID: expectedID,
+                    reselectionsRemaining: reselectionsRemaining - 1,
+                    completion: completion
+                )
+            default:
                 self.finishSwitch(
                     with: .unavailable("輸入法未完成切換，請再試一次"),
                     completion: completion
@@ -209,21 +245,79 @@ final class InputSourceManager: NSObject {
         }
     }
 
-    private func selectionIsConfirmed(expectedID: String, expectsPinyin: Bool) -> Bool {
-        let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        guard stringProperty(current, key: kTISPropertyInputSourceID) == expectedID else {
+    /// macOS 14+ shows its input source indicator as a small floating window
+    /// owned by the focused app, about 50 ms after a switch.
+    private func waitForNativeIndicator(pollsRemaining: Int, completion: @escaping (Bool) -> Void) {
+        if nativeIndicatorIsVisible() { return completion(true) }
+        guard pollsRemaining > 0 else { return completion(false) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            self?.waitForNativeIndicator(pollsRemaining: pollsRemaining - 1, completion: completion)
+        }
+    }
+
+    private func nativeIndicatorIsVisible() -> Bool {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
             return false
         }
-        guard expectsPinyin else { return true }
-
-        // For Apple Pinyin, the input source ID may change before its Pinyin
-        // keyboard layout is ready. Waiting for both prevents the UI from
-        // claiming success while keystrokes are still handled as Latin text.
-        let layout = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
-        let layoutID = stringProperty(layout, key: kTISPropertyInputSourceID) ?? ""
-        let layoutName = stringProperty(layout, key: kTISPropertyLocalizedName) ?? ""
-        return PinyinInputSourceClassifier.isApplePinyin(id: layoutID, localizedName: layoutName)
+        let floatingLevel = Int(CGWindowLevelForKey(.floatingWindow))
+        return windows.contains { window in
+            guard window[kCGWindowOwnerPID as String] as? pid_t == pid,
+                  window[kCGWindowLayer as String] as? Int == floatingLevel,
+                  let boundsInfo = window[kCGWindowBounds as String] as? NSDictionary,
+                  let bounds = CGRect(dictionaryRepresentation: boundsInfo as CFDictionary) else { return false }
+            return bounds.width < 160 && bounds.height < 160
+        }
     }
+
+    private func focusedElementAcceptsText() -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        // Applies to every element; a busy app must not stall the switch.
+        AXUIElementSetMessagingTimeout(systemWide, 0.1)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focused,
+              CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
+        var range: CFTypeRef?
+        return AXUIElementCopyAttributeValue(
+            focused as! AXUIElement,
+            kAXSelectedTextRangeAttribute as CFString,
+            &range
+        ) == .success
+    }
+
+    /// A CJKV input method selected from a background process updates the
+    /// menu bar but not the focused text field, which keeps producing Latin
+    /// text until focus changes. Briefly taking focus and handing it back
+    /// makes the field adopt the new source (the same fix macism uses).
+    private func refreshFocusedInputContext(then done: @escaping () -> Void) {
+        guard let previous = NSWorkspace.shared.frontmostApplication,
+              previous != NSRunningApplication.current else { return done() }
+        focusWindow.setFrameOrigin(NSEvent.mouseLocation)
+        // Key and main before activating, so activation raises only this
+        // window rather than an open Settings window.
+        focusWindow.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
+            self?.focusWindow.orderOut(nil)
+            previous.activate(options: [])
+            // Let the app regain key focus before deferred keys are replayed.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: done)
+        }
+    }
+
+    private lazy var focusWindow: NSWindow = {
+        let window = FocusWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: true
+        )
+        window.alphaValue = 0
+        window.level = .statusBar
+        window.isReleasedWhenClosed = false
+        return window
+    }()
 
     private func finishSwitch(
         with result: ToggleResult,
@@ -252,8 +346,20 @@ final class InputSourceManager: NSObject {
         return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue() as? String
     }
 
+    private func boolProperty(_ source: TISInputSource, key: CFString) -> Bool? {
+        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
+        let value = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
+        guard CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
+        return CFBooleanGetValue((value as! CFBoolean))
+    }
+
     private func arrayProperty(_ source: TISInputSource, key: CFString) -> [String]? {
         guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
         return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue() as? [String]
     }
+}
+
+private final class FocusWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }

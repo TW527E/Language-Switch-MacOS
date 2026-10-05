@@ -16,12 +16,16 @@ public struct ShiftGestureStateMachine: Sendable {
 
     public init() {}
 
-    public mutating func shiftFlagsChanged(keyCode: UInt16, hasOtherModifiers: Bool = false) -> Action {
-        if pressedShiftKeys.contains(keyCode) {
+    /// `isDown` comes from the event's flags rather than from alternating
+    /// presses, so one missed event cannot invert the state and make every
+    /// Shift press look like a release.
+    public mutating func shiftFlagsChanged(keyCode: UInt16, isDown: Bool, hasOtherModifiers: Bool = false) -> Action {
+        guard isDown else {
+            // A release whose press was never seen is not a tap.
+            guard pressedShiftKeys.remove(keyCode) != nil else { return .pass }
             if hasOtherModifiers {
                 shiftWasUsed = true
             }
-            pressedShiftKeys.remove(keyCode)
             guard pressedShiftKeys.isEmpty else { return .pass }
 
             let shouldToggle = !shiftWasUsed
@@ -29,7 +33,8 @@ public struct ShiftGestureStateMachine: Sendable {
             return shouldToggle ? .toggleInputSource : .pass
         }
 
-        if pressedShiftKeys.isEmpty {
+        // Ignoring this key also recovers from its own missed release.
+        if pressedShiftKeys.subtracting([keyCode]).isEmpty {
             shiftWasUsed = false
         }
         pressedShiftKeys.insert(keyCode)

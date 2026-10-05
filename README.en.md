@@ -10,8 +10,8 @@ ShiftInput is a lightweight, event-driven, native macOS enhancement for switchin
 
 - Tap `Shift` by itself to switch from the current input source to the most recently used English input source.
 - When English is active, tap `Shift` again to restore the previously used input source.
-- When returning to Apple Pinyin, ShiftInput waits for the Pinyin keyboard layout to activate and retries if macOS has not finished switching, preventing a Pinyin indicator with Latin-only typing.
-- A macOS-style input-source HUD appears after switching.
+- When returning to Apple Pinyin, ShiftInput waits for the input source to become selected and retries if macOS has not finished switching. Plain text keystrokes during that bounded wait are deferred so the Pinyin indicator cannot be paired with lost or Latin-only first input.
+- After switching, macOS shows its native input-source indicator next to the caret; ShiftInput only hands focus around when a focused text input has not adopted the new source, since that dismisses the indicator.
 - Typing uppercase letters, modifier shortcuts, Shift-clicking, and Shift-scrolling do not trigger a switch.
 
 ### Shift + Space Pinyin width toggle
@@ -34,6 +34,7 @@ The two shortcuts can be enabled or disabled independently in Settings.
 
 - Show the menu bar icon; enabled by default.
 - Show the Dock icon; disabled by default.
+- Show the center-screen HUD when macOS does not show its caret indicator; disabled by default.
 - If both icons are hidden, open ShiftInput again from Finder to return to Settings.
 
 ## Requirements and permissions
@@ -103,7 +104,7 @@ To publish a new version, change the semantic version in the root `VERSION` file
 - The event mask follows the enabled shortcuts; mouse and scroll events are not monitored when Shift switching is disabled.
 - System input-source notifications replace continuous polling.
 - Each input-source notification uses one system snapshot to update persistence, Pinyin capability, and UI consistently.
-- `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed, including the active keyboard layout for Apple Pinyin, and retried when necessary.
+- `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed with the current source ID and selected state, retried a bounded number of times when necessary, and plain text keystrokes and Shift are deferred until confirmation completes, so a capital letter typed right after a switch is not seen by Pinyin as a bare Shift tap that toggles its Chinese/English mode.
 - `Shift + Space` is forwarded as Apple's native `Option + Shift + H` command only when Apple Pinyin is detected.
 - Foreground-app metadata is refreshed only when the active app changes; remote-app and game bypass checks do not poll windows or processes.
 - A timed-out event tap recovers automatically; monitoring stops if permissions are revoked.

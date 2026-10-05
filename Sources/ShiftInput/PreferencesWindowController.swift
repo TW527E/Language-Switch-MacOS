@@ -12,6 +12,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     private var excludedBundleIDs: [String] = []
     private let addExcludedAppButton = NSButton(title: "加入 App…", target: nil, action: nil)
     private let removeExcludedAppButton = NSButton(title: "移除", target: nil, action: nil)
+    private let centerHUDFallbackButton = NSButton(checkboxWithTitle: "macOS 未在游標旁顯示輸入法提示時，改在螢幕中央顯示", target: nil, action: nil)
     private let statusItemButton = NSButton(checkboxWithTitle: "在選單列顯示圖標", target: nil, action: nil)
     private let dockIconButton = NSButton(checkboxWithTitle: "在 Dock 顯示圖標", target: nil, action: nil)
     private let permissionStatus = NSTextField(labelWithString: "")
@@ -20,7 +21,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     init(settings: SettingsStore) {
         self.settings = settings
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 650),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 680),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -51,6 +52,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         pinyinWidthToggleButton.state = settings.pinyinWidthToggleEnabled ? .on : .off
         automaticBypassButton.state = settings.automaticallyBypassRemoteAppsAndGames ? .on : .off
         refreshExcludedApps()
+        centerHUDFallbackButton.state = settings.showCenterHUDAsFallback ? .on : .off
         statusItemButton.state = settings.showStatusItem ? .on : .off
         dockIconButton.state = settings.showDockIcon ? .on : .off
         let status = AccessibilityPermission.status
@@ -69,7 +71,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         let subtitle = NSTextField(wrappingLabelWithString: "兩項快捷鍵可獨立啟用。Shift 用於輸入法切換；Shift + Space 僅用於 Apple 拼音輸入法的全形／半形切換。")
         subtitle.textColor = .secondaryLabelColor
 
-        [shiftToggleButton, pinyinWidthToggleButton, automaticBypassButton, statusItemButton, dockIconButton].forEach {
+        [shiftToggleButton, pinyinWidthToggleButton, automaticBypassButton, centerHUDFallbackButton, statusItemButton, dockIconButton].forEach {
             $0.target = self
             $0.action = #selector(settingChanged(_:))
         }
@@ -129,7 +131,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
 
         let stack = NSStackView(views: [
             title, subtitle, separator(), shiftToggleButton, pinyinWidthToggleButton,
-            shortcutTitle, shortcuts, separator(), bypassTitle, automaticBypassButton,
+            shortcutTitle, shortcuts, centerHUDFallbackButton, separator(), bypassTitle, automaticBypassButton,
             bypassNote, excludedAppsTitle, excludedAppsScrollView, excludedAppControls, separator(), statusItemButton,
             dockIconButton, visibilityNote, separator(), permissionStatus,
             permissionButton
@@ -167,6 +169,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
             settings.pinyinWidthToggleEnabled = sender.state == .on
         case automaticBypassButton:
             settings.automaticallyBypassRemoteAppsAndGames = sender.state == .on
+        case centerHUDFallbackButton:
+            settings.showCenterHUDAsFallback = sender.state == .on
         case statusItemButton:
             settings.showStatusItem = sender.state == .on
         case dockIconButton:
