@@ -1,5 +1,4 @@
 import AppKit
-import ShiftInputCore
 
 final class StatusBarController: NSObject, NSMenuDelegate {
     var onOpenPreferences: (() -> Void)?
@@ -9,10 +8,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private let settings: SettingsStore
     private var statusItem: NSStatusItem?
     private var currentSource: InputSourceDescriptor
-    private var accessibilityGranted = false
-    private static let currentSourceItemIdentifier = NSUserInterfaceItemIdentifier("ShiftInput.currentSource")
-    private static let automaticBypassItemIdentifier = NSUserInterfaceItemIdentifier("ShiftInput.automaticBypass")
-    private static let currentAppBypassItemIdentifier = NSUserInterfaceItemIdentifier("ShiftInput.currentAppBypass")
 
     init(settings: SettingsStore, initialSource: InputSourceDescriptor) {
         self.settings = settings
@@ -24,7 +19,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func applyVisibility() {
         if settings.showStatusItem, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            item.menu = makeMenu()
+            let menu = NSMenu()
+            menu.delegate = self
+            menuNeedsUpdate(menu)
+            item.menu = menu
             statusItem = item
             updateButton()
         } else if !settings.showStatusItem, let statusItem {
@@ -36,11 +34,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func update(source: InputSourceDescriptor) {
         currentSource = source
         updateButton()
-    }
-
-    func updatePermission(granted: Bool) {
-        accessibilityGranted = granted
-        statusItem?.menu = makeMenu()
     }
 
     private func updateButton() {
@@ -57,129 +50,67 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         button.setAccessibilityLabel(description)
     }
 
-    private func makeMenu() -> NSMenu {
-        let menu = NSMenu()
-        menu.delegate = self
-        let sourceItem = NSMenuItem(title: "目前：\(currentSource.name)", action: nil, keyEquivalent: "")
-        sourceItem.identifier = Self.currentSourceItemIdentifier
-        sourceItem.isEnabled = false
-        menu.addItem(sourceItem)
-
-        let shiftToggle = NSMenuItem(title: "啟用 Shift 輸入法切換", action: #selector(toggleShift(_:)), keyEquivalent: "")
-        shiftToggle.target = self
-        shiftToggle.state = settings.shiftToggleEnabled ? .on : .off
-        menu.addItem(shiftToggle)
-
-        let widthToggle = NSMenuItem(title: "啟用 Shift + Space 拼音全／半形", action: #selector(togglePinyinWidth(_:)), keyEquivalent: "")
-        widthToggle.target = self
-        widthToggle.state = settings.pinyinWidthToggleEnabled ? .on : .off
-        menu.addItem(widthToggle)
-
-        let automaticBypass = NSMenuItem(title: "在遠端軟體與遊戲中自動放行兩項快捷鍵", action: #selector(toggleAutomaticBypass(_:)), keyEquivalent: "")
-        automaticBypass.identifier = Self.automaticBypassItemIdentifier
-        automaticBypass.target = self
-        automaticBypass.state = settings.automaticallyBypassRemoteAppsAndGames ? .on : .off
-        menu.addItem(automaticBypass)
-
-        let currentAppBypass = NSMenuItem(title: "在目前 App 中放行兩項快捷鍵", action: #selector(toggleCurrentAppBypass(_:)), keyEquivalent: "")
-        currentAppBypass.identifier = Self.currentAppBypassItemIdentifier
-        currentAppBypass.target = self
-        menu.addItem(currentAppBypass)
-
-        if !accessibilityGranted {
-            let permission = NSMenuItem(title: "完成鍵盤監聽權限設定…", action: #selector(retryPermission), keyEquivalent: "")
-            permission.target = self
-            menu.addItem(permission)
+    /// Rebuilt on every open, so it always shows current settings and
+    /// permission state. Items without an action are disabled by NSMenu.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        menu.addItem(withTitle: "目前：\(currentSource.name)", action: nil, keyEquivalent: "")
+        menu.addItem(toggle("啟用 Shift 輸入法切換", \.shiftToggleEnabled))
+        menu.addItem(toggle("啟用 Shift + Space 拼音全／半形", \.pinyinWidthToggleEnabled))
+        menu.addItem(toggle("在遠端軟體與遊戲中自動放行兩項快捷鍵", \.automaticallyBypassRemoteAppsAndGames))
+        menu.addItem(currentAppBypassItem())
+        if !AccessibilityPermission.isGranted {
+            menu.addItem(item("完成鍵盤監聽權限設定…", #selector(retryPermission)))
         }
-
         menu.addItem(.separator())
-        let preferences = NSMenuItem(title: "設定…", action: #selector(openPreferences), keyEquivalent: ",")
-        preferences.target = self
-        menu.addItem(preferences)
+        menu.addItem(item("設定…", #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "結束 ShiftInput", action: #selector(quitApplication), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
-        return menu
+        menu.addItem(withTitle: "結束 ShiftInput", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
-    @objc private func toggleShift(_ sender: NSMenuItem) {
-        settings.shiftToggleEnabled.toggle()
-    }
-
-    @objc private func togglePinyinWidth(_ sender: NSMenuItem) {
-        settings.pinyinWidthToggleEnabled.toggle()
-    }
-
-    @objc private func toggleAutomaticBypass(_ sender: NSMenuItem) {
-        settings.automaticallyBypassRemoteAppsAndGames.toggle()
-    }
-
-    @objc private func toggleCurrentAppBypass(_ sender: NSMenuItem) {
-        guard let application = foregroundApplicationProvider?() else { return }
+    private func currentAppBypassItem() -> NSMenuItem {
+        guard let application = foregroundApplicationProvider?() else {
+            return NSMenuItem(title: "在目前 App 中放行兩項快捷鍵", action: nil, keyEquivalent: "")
+        }
+        if settings.automaticallyBypassRemoteAppsAndGames, application.isRemoteOrGame {
+            let item = NSMenuItem(title: "已自動放行兩項快捷鍵：\(application.localizedName)", action: nil, keyEquivalent: "")
+            item.state = .on
+            return item
+        }
+        let item = item("在「\(application.localizedName)」中放行兩項快捷鍵", #selector(toggleCurrentAppBypass))
         let shiftIsExcluded = settings.shiftExcludedBundleIDs.contains(application.bundleIdentifier)
         let widthIsExcluded = settings.pinyinWidthExcludedBundleIDs.contains(application.bundleIdentifier)
         if shiftIsExcluded && widthIsExcluded {
-            settings.removeExcludedApplication(bundleIdentifier: application.bundleIdentifier)
-        } else {
-            settings.addExcludedApplication(bundleIdentifier: application.bundleIdentifier)
-        }
-    }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        for item in menu.items {
-            if item.identifier == Self.currentSourceItemIdentifier {
-                item.title = "目前：\(currentSource.name)"
-            }
-            if item.identifier == Self.automaticBypassItemIdentifier {
-                item.state = settings.automaticallyBypassRemoteAppsAndGames ? .on : .off
-            }
-            if item.identifier == Self.currentAppBypassItemIdentifier {
-                updateCurrentAppBypassItem(item)
-            }
-            switch item.action {
-            case #selector(toggleShift(_:)):
-                item.state = settings.shiftToggleEnabled ? .on : .off
-            case #selector(togglePinyinWidth(_:)):
-                item.state = settings.pinyinWidthToggleEnabled ? .on : .off
-            default:
-                break
-            }
-        }
-    }
-
-    private func updateCurrentAppBypassItem(_ item: NSMenuItem) {
-        guard let application = foregroundApplicationProvider?() else {
-            item.title = "在目前 App 中放行兩項快捷鍵"
-            item.state = .off
-            item.isEnabled = false
-            return
-        }
-
-        let isAutomaticallyBypassed = settings.automaticallyBypassRemoteAppsAndGames
-            && ApplicationBypassPolicy.isAutomaticallyBypassed(
-                bundleIdentifier: application.bundleIdentifier,
-                localizedName: application.localizedName,
-                bundlePath: application.bundlePath,
-                applicationCategory: application.applicationCategory
-            )
-        let shiftIsExcluded = settings.shiftExcludedBundleIDs.contains(application.bundleIdentifier)
-        let widthIsExcluded = settings.pinyinWidthExcludedBundleIDs.contains(application.bundleIdentifier)
-        if isAutomaticallyBypassed {
-            item.title = "已自動放行兩項快捷鍵：\(application.localizedName)"
             item.state = .on
-            item.isEnabled = false
-        } else {
-            item.title = "在「\(application.localizedName)」中放行兩項快捷鍵"
-            if shiftIsExcluded && widthIsExcluded {
-                item.state = .on
-            } else if shiftIsExcluded || widthIsExcluded {
-                item.state = .mixed
-            } else {
-                item.state = .off
-            }
-            item.isEnabled = true
+        } else if shiftIsExcluded || widthIsExcluded {
+            item.state = .mixed
         }
+        return item
+    }
+
+    private func toggle(_ title: String, _ keyPath: ReferenceWritableKeyPath<SettingsStore, Bool>) -> NSMenuItem {
+        let item = item(title, #selector(toggleSetting(_:)))
+        item.representedObject = keyPath
+        item.state = settings[keyPath: keyPath] ? .on : .off
+        return item
+    }
+
+    private func item(_ title: String, _ action: Selector, keyEquivalent: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = self
+        return item
+    }
+
+    @objc private func toggleSetting(_ sender: NSMenuItem) {
+        guard let keyPath = sender.representedObject as? ReferenceWritableKeyPath<SettingsStore, Bool> else { return }
+        settings[keyPath: keyPath].toggle()
+    }
+
+    @objc private func toggleCurrentAppBypass() {
+        guard let application = foregroundApplicationProvider?() else { return }
+        let isFullyBypassed = settings.shiftExcludedBundleIDs.contains(application.bundleIdentifier)
+            && settings.pinyinWidthExcludedBundleIDs.contains(application.bundleIdentifier)
+        settings.setBypassed(!isFullyBypassed, bundleIdentifier: application.bundleIdentifier)
     }
 
     @objc private func retryPermission() {
@@ -188,9 +119,5 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func openPreferences() {
         onOpenPreferences?()
-    }
-
-    @objc private func quitApplication() {
-        NSApp.terminate(nil)
     }
 }

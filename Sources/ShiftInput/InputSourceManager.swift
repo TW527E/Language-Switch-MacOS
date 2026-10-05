@@ -2,7 +2,7 @@ import AppKit
 import Carbon
 import ShiftInputCore
 
-struct InputSourceDescriptor: Equatable {
+struct InputSourceDescriptor {
     let id: String
     let name: String
     let languages: [String]
@@ -22,7 +22,7 @@ struct InputSourceDescriptor: Equatable {
 final class InputSourceManager: NSObject {
     enum ToggleResult {
         case switched(InputSourceDescriptor, nativeIndicatorShown: Bool)
-        case unavailable(String)
+        case unavailable
     }
 
     var onInputSourceChanged: ((InputSourceDescriptor) -> Void)?
@@ -59,30 +59,26 @@ final class InputSourceManager: NSObject {
     /// input method, then confirms that macOS has activated the destination.
     /// This prevents Apple Pinyin from occasionally receiving an unmatched
     /// Shift-up while it is still finishing activation and remaining in a
-    /// Latin-only state. Returns false when a switch is already in progress.
-    @discardableResult
-    func toggleEnglishAndPrevious(completion: @escaping (ToggleResult) -> Void) -> Bool {
-        guard !switchInProgress else { return false }
+    /// Latin-only state. Ignored while a switch is already in progress.
+    func toggleEnglishAndPrevious(completion: @escaping (ToggleResult) -> Void) {
+        guard !switchInProgress else { return }
 
         let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
         let english = TISCopyCurrentASCIICapableKeyboardInputSource().takeRetainedValue()
-        let currentID = stringProperty(current, key: kTISPropertyInputSourceID) ?? ""
-        let englishID = stringProperty(english, key: kTISPropertyInputSourceID) ?? ""
+        let currentID = id(of: current) ?? ""
+        let englishID = id(of: english) ?? ""
 
         if currentID == englishID {
             guard let previous = previousNonEnglishSource(excluding: englishID) else {
-                completion(.unavailable("尚未記錄可返回的輸入法"))
-                return true
+                return completion(.unavailable)
             }
-            beginConfirmedSelection(of: previous, completion: completion)
-            return true
+            return beginConfirmedSelection(of: previous, completion: completion)
         }
 
         if !currentID.isEmpty {
             settings.lastNonEnglishSourceID = currentID
         }
         beginConfirmedSelection(of: english, completion: completion)
-        return true
     }
 
     @objc private func inputSourceDidChange(_ notification: Notification) {
@@ -99,18 +95,16 @@ final class InputSourceManager: NSObject {
     }
 
     private func updatePinyinWidthSupport(for source: TISInputSource) {
-        let id = (stringProperty(source, key: kTISPropertyInputSourceID) ?? "").lowercased()
-        let name = (stringProperty(source, key: kTISPropertyLocalizedName) ?? "").lowercased()
         currentSourceSupportsPinyinWidthToggle = PinyinInputSourceClassifier.isApplePinyin(
-            id: id,
-            localizedName: name
+            id: id(of: source) ?? "",
+            localizedName: property(source, kTISPropertyLocalizedName) ?? ""
         )
     }
 
     private func rememberCurrentSourceIfNeeded(_ current: TISInputSource) {
         let english = TISCopyCurrentASCIICapableKeyboardInputSource().takeRetainedValue()
-        guard let currentID = stringProperty(current, key: kTISPropertyInputSourceID),
-              let englishID = stringProperty(english, key: kTISPropertyInputSourceID),
+        guard let currentID = id(of: current),
+              let englishID = id(of: english),
               currentID != englishID else { return }
         settings.lastNonEnglishSourceID = currentID
     }
@@ -129,8 +123,8 @@ final class InputSourceManager: NSObject {
         ]
         let sources = TISCreateInputSourceList(filter as CFDictionary, false)?.takeRetainedValue() as? [TISInputSource] ?? []
         return sources.first { source in
-            guard stringProperty(source, key: kTISPropertyInputSourceID) != englishID else { return false }
-            return arrayProperty(source, key: kTISPropertyInputSourceLanguages)?.contains {
+            guard id(of: source) != englishID else { return false }
+            return (property(source, kTISPropertyInputSourceLanguages) as [String]?)?.contains {
                 $0.lowercased().hasPrefix("zh")
             } ?? false
         }
@@ -151,7 +145,7 @@ final class InputSourceManager: NSObject {
         completion: @escaping (ToggleResult) -> Void
     ) {
         switchInProgress = true
-        let expectedID = stringProperty(source, key: kTISPropertyInputSourceID) ?? ""
+        let expectedID = id(of: source) ?? ""
 
         // The event tap callback runs before the Shift-up reaches the active
         // app and input method. Delaying selection keeps that release with
@@ -170,11 +164,7 @@ final class InputSourceManager: NSObject {
     ) {
         let status = TISSelectInputSource(source)
         guard status == noErr else {
-            finishSwitch(
-                with: .unavailable("輸入法切換失敗（錯誤 \(status)）"),
-                completion: completion
-            )
-            return
+            return finishSwitch(with: .unavailable, completion: completion)
         }
         confirmSelection(
             of: source,
@@ -201,13 +191,19 @@ final class InputSourceManager: NSObject {
             let current = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
             let decision = InputSourceSelectionPolicy.decision(
                 expectedID: expectedID,
-                currentID: self.stringProperty(current, key: kTISPropertyInputSourceID),
-                isSelected: self.boolProperty(source, key: kTISPropertyInputSourceIsSelected)
+                currentID: self.id(of: current),
+                isSelected: self.property(source, kTISPropertyInputSourceIsSelected)
             )
             switch decision {
             case .confirmed:
                 let descriptor = self.descriptor(for: current)
-                let isCJKV = self.boolProperty(source, key: kTISPropertyInputSourceIsASCIICapable) == false
+                let isCJKV = self.property(source, kTISPropertyInputSourceIsASCIICapable) == false
+                // A Latin source takes effect at once. Only the CJKV focus
+                // hand-off and the HUD fallback need to wait for the
+                // indicator, so held keystrokes are released right away.
+                guard isCJKV || self.settings.showCenterHUDAsFallback else {
+                    return self.finishSwitch(with: .switched(descriptor, nativeIndicatorShown: false), completion: completion)
+                }
                 self.waitForNativeIndicator(pollsRemaining: 6) { shown in
                     // The focused app draws the indicator once it has adopted
                     // the new source. The focus hand-off would dismiss it and
@@ -237,10 +233,7 @@ final class InputSourceManager: NSObject {
                     completion: completion
                 )
             default:
-                self.finishSwitch(
-                    with: .unavailable("輸入法未完成切換，請再試一次"),
-                    completion: completion
-                )
+                self.finishSwitch(with: .unavailable, completion: completion)
             }
         }
     }
@@ -328,34 +321,23 @@ final class InputSourceManager: NSObject {
     }
 
     private func descriptor(for source: TISInputSource) -> InputSourceDescriptor {
-        let id = stringProperty(source, key: kTISPropertyInputSourceID) ?? "unknown"
-        let name = stringProperty(source, key: kTISPropertyLocalizedName) ?? id
-        let languages = arrayProperty(source, key: kTISPropertyInputSourceLanguages) ?? []
-        return InputSourceDescriptor(id: id, name: name, languages: languages, icon: icon(for: source))
+        let id = self.id(of: source) ?? "unknown"
+        return InputSourceDescriptor(
+            id: id,
+            name: property(source, kTISPropertyLocalizedName) ?? id,
+            languages: property(source, kTISPropertyInputSourceLanguages) ?? [],
+            icon: (property(source, kTISPropertyIconImageURL) as URL?).flatMap(NSImage.init(contentsOf:))
+        )
     }
 
-    private func icon(for source: TISInputSource) -> NSImage? {
-        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyIconImageURL) else { return nil }
-        let value = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
-        guard let url = value as? URL else { return nil }
-        return NSImage(contentsOf: url)
+    private func id(of source: TISInputSource) -> String? {
+        property(source, kTISPropertyInputSourceID)
     }
 
-    private func stringProperty(_ source: TISInputSource, key: CFString) -> String? {
+    /// TIS properties are CF objects; CFBoolean bridges to Bool and CFURL to URL.
+    private func property<Value>(_ source: TISInputSource, _ key: CFString) -> Value? {
         guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
-        return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue() as? String
-    }
-
-    private func boolProperty(_ source: TISInputSource, key: CFString) -> Bool? {
-        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
-        let value = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
-        guard CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
-        return CFBooleanGetValue((value as! CFBoolean))
-    }
-
-    private func arrayProperty(_ source: TISInputSource, key: CFString) -> [String]? {
-        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
-        return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue() as? [String]
+        return Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue() as? Value
     }
 }
 

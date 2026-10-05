@@ -1,61 +1,46 @@
 import AppKit
-import ShiftInputCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let settings = SettingsStore.shared
+    private let settings = SettingsStore()
     private lazy var inputSources = InputSourceManager(settings: settings)
     private let keyboardMonitor = GlobalKeyboardMonitor()
     private let hud = InputSourceHUDController()
     private lazy var statusBar = StatusBarController(settings: settings, initialSource: inputSources.currentDescriptor)
     private lazy var preferences = PreferencesWindowController(settings: settings)
-    private var settingsObserver: NSObjectProtocol?
-    private var workspaceObserver: NSObjectProtocol?
     private var foregroundApplication: ForegroundApplicationInfo?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let isFirstLaunch = settings.consumeFirstLaunch()
         rememberForegroundApplication(NSWorkspace.shared.frontmostApplication)
         configureApplicationMenu()
-        applyDockVisibility()
         configureCallbacks()
 
-        _ = statusBar
-        _ = preferences
-        settingsObserver = NotificationCenter.default.addObserver(
+        NotificationCenter.default.addObserver(
             forName: .shiftInputSettingsDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.settingsDidChange()
         }
-        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+        // Also fires for this app; permission may have been granted meanwhile.
+        NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            self?.rememberForegroundApplication(application)
+            self?.rememberForegroundApplication(notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
             self?.refreshKeyboardMonitor()
-            self?.refreshPermissionUI()
-            self?.preferences.refresh()
         }
 
         if settings.hasEnabledKeyboardFeature {
-            _ = AccessibilityPermission.requestIfNeeded()
-            refreshKeyboardMonitor()
+            AccessibilityPermission.requestIfNeeded()
         }
-        refreshPermissionUI()
+        settingsDidChange()
         if isFirstLaunch || !AccessibilityPermission.isGranted {
             DispatchQueue.main.async { [weak self] in
                 self?.preferences.showAndActivate()
             }
         }
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        refreshKeyboardMonitor()
-        refreshPermissionUI()
-        preferences.refresh()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -65,26 +50,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         keyboardMonitor.stop()
-        if let settingsObserver {
-            NotificationCenter.default.removeObserver(settingsObserver)
-        }
-        if let workspaceObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
-        }
     }
 
     private func configureCallbacks() {
         inputSources.onInputSourceChanged = { [weak self] source in
             self?.statusBar.update(source: source)
         }
+        keyboardMonitor.shouldHandleShiftTap = { [weak self] in
+            guard let self else { return false }
+            return self.settings.shiftToggleEnabled && !self.isBypassed(self.settings.shiftExcludedBundleIDs)
+        }
+        keyboardMonitor.shouldHandleWidthToggle = { [weak self] in
+            guard let self else { return false }
+            return self.settings.pinyinWidthToggleEnabled
+                && self.inputSources.currentSourceSupportsPinyinWidthToggle
+                && !self.isBypassed(self.settings.pinyinWidthExcludedBundleIDs)
+        }
         keyboardMonitor.onShiftTap = { [weak self] in
-            guard let self, self.settings.shiftToggleEnabled else {
-                self?.keyboardMonitor.finishDeferringInput()
-                return
-            }
             // A switch already in progress keeps the active deferral and
             // releases it from its own completion.
-            self.inputSources.toggleEnglishAndPrevious { [weak self] result in
+            self?.inputSources.toggleEnglishAndPrevious { [weak self] result in
                 guard let self else { return }
                 self.keyboardMonitor.finishDeferringInput()
                 switch result {
@@ -98,23 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        keyboardMonitor.shouldHandleShiftTap = { [weak self] in
-            guard let self, self.settings.shiftToggleEnabled else { return false }
-            return !self.shouldBypassShortcut(manualBundleIDs: self.settings.shiftExcludedBundleIDs)
-        }
-        keyboardMonitor.shouldHandleWidthToggle = { [weak self] in
-            guard let self, self.settings.pinyinWidthToggleEnabled else { return false }
-            guard self.inputSources.currentSourceSupportsPinyinWidthToggle else { return false }
-            return !self.shouldBypassShortcut(manualBundleIDs: self.settings.pinyinWidthExcludedBundleIDs)
-        }
-        keyboardMonitor.onWidthToggle = {
-            GlobalKeyboardMonitor.postNativeChineseWidthShortcut()
-        }
         keyboardMonitor.onTapDisabled = { [weak self] in
-            DispatchQueue.main.async {
-                self?.refreshKeyboardMonitor()
-                self?.refreshPermissionUI()
-            }
+            DispatchQueue.main.async { self?.refreshKeyboardMonitor() }
         }
         statusBar.onOpenPreferences = { [weak self] in self?.preferences.showAndActivate() }
         statusBar.onRetryPermission = { [weak self] in self?.requestAndRefreshPermission() }
@@ -122,16 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferences.onRetryPermission = { [weak self] in self?.requestAndRefreshPermission() }
     }
 
-    private func shouldBypassShortcut(manualBundleIDs: Set<String>) -> Bool {
+    private func isBypassed(_ excludedBundleIDs: Set<String>) -> Bool {
         guard let application = foregroundApplication else { return false }
-        return ApplicationBypassPolicy.shouldBypass(
-            bundleIdentifier: application.bundleIdentifier,
-            localizedName: application.localizedName,
-            bundlePath: application.bundlePath,
-            applicationCategory: application.applicationCategory,
-            excludedBundleIdentifiers: manualBundleIDs,
-            automaticBypassEnabled: settings.automaticallyBypassRemoteAppsAndGames
-        )
+        return excludedBundleIDs.contains(application.bundleIdentifier)
+            || (settings.automaticallyBypassRemoteAppsAndGames && application.isRemoteOrGame)
     }
 
     private func rememberForegroundApplication(_ application: NSRunningApplication?) {
@@ -141,28 +105,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func settingsDidChange() {
-        applyDockVisibility()
+        NSApp.setActivationPolicy(settings.showDockIcon ? .regular : .accessory)
         statusBar.applyVisibility()
         refreshKeyboardMonitor()
-        refreshPermissionUI()
         preferences.refresh()
     }
 
     private func refreshKeyboardMonitor() {
-        guard settings.hasEnabledKeyboardFeature else {
+        if settings.hasEnabledKeyboardFeature, AccessibilityPermission.isGranted {
+            keyboardMonitor.start()
+        } else {
             keyboardMonitor.stop()
-            return
-        }
-        guard AccessibilityPermission.isGranted else {
-            keyboardMonitor.stop()
-            return
-        }
-        let configuration = GlobalKeyboardMonitor.Configuration(
-            shiftToggleEnabled: settings.shiftToggleEnabled,
-            pinyinWidthToggleEnabled: settings.pinyinWidthToggleEnabled
-        )
-        if !keyboardMonitor.isRunning || keyboardMonitor.configuration != configuration {
-            _ = keyboardMonitor.start(configuration: configuration)
         }
     }
 
@@ -171,20 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AccessibilityPermission.openMissingSystemSettings()
         }
         refreshKeyboardMonitor()
-        refreshPermissionUI()
         preferences.refresh()
-    }
-
-    private func refreshPermissionUI() {
-        statusBar.updatePermission(granted: AccessibilityPermission.isGranted)
-    }
-
-    private func applyDockVisibility() {
-        let policy: NSApplication.ActivationPolicy = settings.showDockIcon ? .regular : .accessory
-        NSApp.setActivationPolicy(policy)
-        if settings.showDockIcon {
-            configureApplicationMenu()
-        }
     }
 
     private func configureApplicationMenu() {

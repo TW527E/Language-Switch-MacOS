@@ -100,15 +100,14 @@ To publish a new version, change the semantic version in the root `VERSION` file
 ## Technical design
 
 - Swift, AppKit, Core Graphics, and Text Input Source Services.
-- `CGEventTap` processes only the required keyboard and pointer events.
-- The event mask follows the enabled shortcuts; mouse and scroll events are not monitored when Shift switching is disabled.
+- `CGEventTap` intercepts keyboard events only; Shift-click and Shift-scroll are detected from the window server's event counters, so no mouse or scroll event passes through ShiftInput.
 - System input-source notifications replace continuous polling.
 - Each input-source notification uses one system snapshot to update persistence, Pinyin capability, and UI consistently.
 - `TISSelectInputSource` performs input-source changes and the previous source is persisted; each switch is confirmed with the current source ID and selected state, retried a bounded number of times when necessary, and plain text keystrokes and Shift are deferred until confirmation completes, so a capital letter typed right after a switch is not seen by Pinyin as a bare Shift tap that toggles its Chinese/English mode.
 - `Shift + Space` is forwarded as Apple's native `Option + Shift + H` command only when Apple Pinyin is detected.
 - Foreground-app metadata is refreshed only when the active app changes; remote-app and game bypass checks do not poll windows or processes.
 - A timed-out event tap recovers automatically; monitoring stops if permissions are revoked.
-- Shortcut changes or a system-disabled event tap rebuild the monitor safely with the latest configuration.
+- A system-disabled event tap is rebuilt safely; changing shortcut settings needs no rebuild.
 
 ## Project layout
 

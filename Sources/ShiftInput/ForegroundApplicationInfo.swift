@@ -1,10 +1,11 @@
 import AppKit
+import ShiftInputCore
 
-struct ForegroundApplicationInfo: Equatable {
+struct ForegroundApplicationInfo {
     let bundleIdentifier: String
     let localizedName: String
-    let bundlePath: String?
-    let applicationCategory: String?
+    /// Classified once per activation so the event tap only reads a Bool.
+    let isRemoteOrGame: Bool
 
     init?(runningApplication: NSRunningApplication) {
         guard let bundleIdentifier = runningApplication.bundleIdentifier,
@@ -19,7 +20,11 @@ struct ForegroundApplicationInfo: Equatable {
             ?? appBundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? appBundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? bundleIdentifier
-        self.bundlePath = bundleURL?.path
-        self.applicationCategory = appBundle?.object(forInfoDictionaryKey: "LSApplicationCategoryType") as? String
+        self.isRemoteOrGame = ApplicationBypassPolicy.isAutomaticallyBypassed(
+            bundleIdentifier: bundleIdentifier,
+            localizedName: localizedName,
+            bundlePath: bundleURL?.path,
+            applicationCategory: appBundle?.object(forInfoDictionaryKey: "LSApplicationCategoryType") as? String
+        )
     }
 }

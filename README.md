@@ -100,15 +100,14 @@ make verify
 ## 技術設計
 
 - Swift、AppKit、Core Graphics、Text Input Source Services。
-- `CGEventTap` 僅處理必要的鍵盤與指標事件。
-- 事件監聽範圍會依已啟用的快捷鍵調整；未啟用 Shift 切換時不監聽滑鼠與捲動事件。
+- `CGEventTap` 只攔截鍵盤事件；Shift 點擊與 Shift 捲動改以視窗伺服器的事件計數判斷，系統的滑鼠與捲動事件完全不經過 ShiftInput。
 - 使用系統輸入來源通知，不持續輪詢輸入法狀態。
 - 每次輸入來源通知只讀取一次系統快照，並一致地更新保存來源、拼音能力與介面。
 - 使用 `TISSelectInputSource` 切換輸入法並保存上次來源；切換後以目前來源 ID 與選取狀態確認，必要時以有限次數重試，並在確認完成前暫存普通文字按鍵與 Shift，避免切換後立即輸入的大寫字母被拼音當成單獨的 Shift 而切換中英文。
 - `Shift + Space` 僅在辨識為 Apple 拼音時轉送為原生 `Option + Shift + H` 命令。
 - 前景 App 改變時才更新應用程式資料；遠端軟體與遊戲放行判斷不輪詢窗口或程序。
 - Event tap 逾時停用時會自動恢復；權限被撤銷時會停止監聽。
-- 快捷鍵設定改變或 event tap 被系統停用時，監聽器會以最新設定安全重建。
+- Event tap 被系統停用時會安全重建；切換快捷鍵設定不需重建監聽器。
 
 ## 專案結構
 

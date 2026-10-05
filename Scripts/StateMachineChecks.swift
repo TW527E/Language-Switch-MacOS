@@ -28,7 +28,7 @@ enum StateMachineChecks {
         state.reset()
         _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true)
         expect(state.keyDown(keyCode: space, isPlainShiftSpace: true) == .requestWidthToggle, "Shift-Space requests width toggle")
-        expect(state.widthToggleWasHandled() == .consume, "handled Space down is consumed")
+        state.widthToggleWasHandled()
         expect(state.keyUp(keyCode: space) == .consume, "handled Space up is consumed")
         expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false) == .pass, "Shift-Space does not also switch source")
 
@@ -39,9 +39,16 @@ enum StateMachineChecks {
         expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false) == .pass, "unsupported Shift-Space still marks Shift used")
 
         state.reset()
-        _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true)
-        _ = state.pointerActivity()
-        expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false) == .pass, "Shift-click does not switch")
+        _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true, pointerEventCount: 7)
+        expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false, pointerEventCount: 8) == .pass, "Shift-click does not switch")
+        _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true, pointerEventCount: 8)
+        expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false, pointerEventCount: 8) == .toggleInputSource, "earlier clicks do not block a later tap")
+
+        state.reset()
+        _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true, pointerEventCount: 1)
+        _ = state.shiftFlagsChanged(keyCode: rightShift, isDown: true, pointerEventCount: 2)
+        _ = state.shiftFlagsChanged(keyCode: rightShift, isDown: false, pointerEventCount: 2)
+        expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false, pointerEventCount: 2) == .pass, "a click before the second Shift press still counts")
 
         state.reset()
         _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true)
@@ -67,7 +74,7 @@ enum StateMachineChecks {
 
         state.reset()
         _ = state.shiftFlagsChanged(keyCode: leftShift, isDown: true)
-        _ = state.otherModifierChanged()
+        state.otherModifierChanged()
         expect(state.shiftFlagsChanged(keyCode: leftShift, isDown: false) == .pass, "modifier chord does not switch")
 
         state.reset()
@@ -116,19 +123,6 @@ enum StateMachineChecks {
             isSelected: true
         ) == .retrySelection, "a different current source permits a bounded reselection")
 
-        var deferredEvents = DeferredInputEventBuffer<Int>()
-        expect(!deferredEvents.appendIfActive(1), "keyboard events pass while no source switch is active")
-        expect(deferredEvents.begin(), "a source switch starts event deferral")
-        expect(!deferredEvents.begin(), "an active event deferral cannot be started twice")
-        expect(deferredEvents.appendIfActive(10), "the first event is deferred during a source switch")
-        expect(deferredEvents.appendIfActive(11), "later events are deferred during a source switch")
-        expect(deferredEvents.finish() == [10, 11], "deferred events are released in their original order")
-        expect(!deferredEvents.isActive, "finishing a source switch disables event deferral")
-        expect(deferredEvents.finish().isEmpty, "finishing twice cannot replay the same events again")
-        expect(deferredEvents.begin(), "event deferral can start cleanly for a later source switch")
-        expect(deferredEvents.appendIfActive(20), "the later source switch accepts new events")
-        expect(deferredEvents.finish() == [20], "a later source switch contains no stale events")
-
         expect(ApplicationBypassPolicy.isAutomaticallyBypassed(
             bundleIdentifier: "com.parsecgaming.parsec",
             localizedName: "Parsec",
@@ -153,22 +147,6 @@ enum StateMachineChecks {
             bundlePath: "/Applications/Safari.app",
             applicationCategory: "public.app-category.productivity"
         ), "ordinary apps are not automatically bypassed")
-        expect(ApplicationBypassPolicy.shouldBypass(
-            bundleIdentifier: "com.example.custom",
-            localizedName: "Custom App",
-            bundlePath: "/Applications/Custom App.app",
-            applicationCategory: nil,
-            excludedBundleIdentifiers: ["com.example.custom"],
-            automaticBypassEnabled: false
-        ), "manual exclusions work when automatic bypass is disabled")
-        expect(!ApplicationBypassPolicy.shouldBypass(
-            bundleIdentifier: "com.parsecgaming.parsec",
-            localizedName: "Parsec",
-            bundlePath: "/Applications/Parsec.app",
-            applicationCategory: nil,
-            excludedBundleIdentifiers: [],
-            automaticBypassEnabled: false
-        ), "automatic bypass can be disabled")
 
         let defaultsName = "ShiftInputChecks.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: defaultsName) else {
@@ -177,25 +155,17 @@ enum StateMachineChecks {
         }
         defer { defaults.removePersistentDomain(forName: defaultsName) }
         let settings = SettingsStore(defaults: defaults)
-        settings.addExcludedApplication(bundleIdentifier: "com.example.remote")
+        expect(settings.shiftToggleEnabled && settings.automaticallyBypassRemoteAppsAndGames, "shortcuts and automatic bypass default to on")
+        expect(!settings.showDockIcon && settings.excludedApplicationBundleIDs.isEmpty, "unregistered settings default to off and empty")
+        settings.setBypassed(true, bundleIdentifier: "com.example.remote")
         expect(settings.shiftExcludedBundleIDs.contains("com.example.remote"), "new app bypasses Shift by default")
         expect(settings.pinyinWidthExcludedBundleIDs.contains("com.example.remote"), "new app bypasses Shift-Space by default")
-        settings.setShiftExcluded(false, bundleIdentifier: "com.example.remote")
+        settings.shiftExcludedBundleIDs.remove("com.example.remote")
         expect(!settings.shiftExcludedBundleIDs.contains("com.example.remote"), "Shift bypass can be disabled independently")
         expect(settings.pinyinWidthExcludedBundleIDs.contains("com.example.remote"), "Shift-Space bypass remains enabled independently")
         expect(settings.excludedApplicationBundleIDs.contains("com.example.remote"), "partially enabled app remains in the list")
-        settings.removeExcludedApplication(bundleIdentifier: "com.example.remote")
+        settings.setBypassed(false, bundleIdentifier: "com.example.remote")
         expect(!settings.excludedApplicationBundleIDs.contains("com.example.remote"), "removing an app clears both bypass switches")
-
-        let migrationDefaultsName = "ShiftInputMigrationChecks.\(UUID().uuidString)"
-        guard let migrationDefaults = UserDefaults(suiteName: migrationDefaultsName) else {
-            fputs("FAILED: could not create migration defaults\n", stderr)
-            exit(1)
-        }
-        defer { migrationDefaults.removePersistentDomain(forName: migrationDefaultsName) }
-        migrationDefaults.set(["com.example.old"], forKey: "pinyinWidthExcludedBundleIDs")
-        let migratedSettings = SettingsStore(defaults: migrationDefaults)
-        expect(migratedSettings.shiftExcludedBundleIDs.contains("com.example.old"), "old test-build exclusions migrate to bypass both shortcuts")
 
         print("State machine checks passed: \(checkCount)")
     }

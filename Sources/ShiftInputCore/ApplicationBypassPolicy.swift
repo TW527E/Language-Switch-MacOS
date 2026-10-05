@@ -1,6 +1,7 @@
 import Foundation
 
-/// Decides whether a ShiftInput shortcut should be left untouched for the foreground app.
+/// Recognizes remote-desktop apps and games, where ShiftInput shortcuts are
+/// left untouched by default.
 ///
 /// The policy intentionally uses stable application metadata instead of polling
 /// windows or processes, keeping the event-tap callback deterministic and cheap.
@@ -8,7 +9,6 @@ public enum ApplicationBypassPolicy {
     private static let remoteBundleIDFragments = [
         "anydesk",
         "chrome-remote-desktop",
-        "chromeremotedesktop",
         "jumpdesktop",
         "logmein",
         "moonlight",
@@ -35,7 +35,6 @@ public enum ApplicationBypassPolicy {
     private static let remoteNameFragments = [
         "anydesk",
         "jump desktop",
-        "microsoft remote desktop",
         "moonlight",
         "nomachine",
         "parsec",
@@ -54,29 +53,6 @@ public enum ApplicationBypassPolicy {
         "/gog games/",
         "/epic games/"
     ]
-
-    public static func shouldBypass(
-        bundleIdentifier: String?,
-        localizedName: String?,
-        bundlePath: String?,
-        applicationCategory: String?,
-        excludedBundleIdentifiers: Set<String>,
-        automaticBypassEnabled: Bool
-    ) -> Bool {
-        let normalizedBundleID = normalize(bundleIdentifier)
-        if !normalizedBundleID.isEmpty,
-           excludedBundleIdentifiers.contains(where: { normalize($0) == normalizedBundleID }) {
-            return true
-        }
-
-        guard automaticBypassEnabled else { return false }
-        return isAutomaticallyBypassed(
-            bundleIdentifier: bundleIdentifier,
-            localizedName: localizedName,
-            bundlePath: bundlePath,
-            applicationCategory: applicationCategory
-        )
-    }
 
     public static func isAutomaticallyBypassed(
         bundleIdentifier: String?,
