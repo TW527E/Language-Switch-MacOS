@@ -1,7 +1,7 @@
 import Foundation
 
 extension Notification.Name {
-    static let shiftInputSettingsDidChange = Notification.Name("ShiftInput.settingsDidChange")
+    static let shiftIMESettingsDidChange = Notification.Name("ShiftIME.settingsDidChange")
 }
 
 final class SettingsStore {
@@ -105,6 +105,6 @@ final class SettingsStore {
     private func set<Value: Equatable>(_ value: Value, forKey key: String) {
         guard defaults.object(forKey: key) as? Value != value else { return }
         defaults.set(value, forKey: key)
-        NotificationCenter.default.post(name: .shiftInputSettingsDidChange, object: self)
+        NotificationCenter.default.post(name: .shiftIMESettingsDidChange, object: self)
     }
 }

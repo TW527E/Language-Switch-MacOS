@@ -5,7 +5,7 @@ build:
 
 test:
 	mkdir -p .build/checks
-	swiftc Sources/ShiftInputCore/*.swift Sources/ShiftInput/SettingsStore.swift Scripts/StateMachineChecks.swift -o .build/checks/state-machine-checks
+	swiftc Sources/ShiftIMECore/*.swift Sources/ShiftIME/SettingsStore.swift Scripts/StateMachineChecks.swift -o .build/checks/state-machine-checks
 	.build/checks/state-machine-checks
 
 app:
@@ -20,7 +20,7 @@ smoke: app
 verify: test smoke
 
 run: app
-	open ./dist/ShiftInput.app
+	open ./dist/ShiftIME.app
 
 clean:
 	swift package clean

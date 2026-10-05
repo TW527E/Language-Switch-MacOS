@@ -1,6 +1,6 @@
 import ApplicationServices
 import Carbon
-import ShiftInputCore
+import ShiftIMECore
 
 final class GlobalKeyboardMonitor {
     var onShiftTap: (() -> Void)?
@@ -18,7 +18,7 @@ final class GlobalKeyboardMonitor {
 
     private static let leftShiftKeyCode: UInt16 = 56
     private static let rightShiftKeyCode: UInt16 = 60
-    private static let syntheticMarker: Int64 = 0x5348494654494E50 // "SHIFTINP"
+    private static let syntheticMarker: Int64 = 0x5348494654494D45 // "SHIFTIME"
 
     var isRunning: Bool {
         eventTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false

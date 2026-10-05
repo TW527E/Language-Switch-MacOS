@@ -148,7 +148,7 @@ enum StateMachineChecks {
             applicationCategory: "public.app-category.productivity"
         ), "ordinary apps are not automatically bypassed")
 
-        let defaultsName = "ShiftInputChecks.\(UUID().uuidString)"
+        let defaultsName = "ShiftIMEChecks.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: defaultsName) else {
             fputs("FAILED: could not create isolated defaults\n", stderr)
             exit(1)

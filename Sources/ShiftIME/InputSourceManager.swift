@@ -1,6 +1,6 @@
 import AppKit
 import Carbon
-import ShiftInputCore
+import ShiftIMECore
 
 struct InputSourceDescriptor {
     let id: String

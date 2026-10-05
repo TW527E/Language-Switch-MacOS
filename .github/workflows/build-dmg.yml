@@ -80,15 +80,15 @@ jobs:
           VERSION: ${{ needs.metadata.outputs.version }}
         shell: bash
         run: |
-          lipo -archs dist/ShiftInput.app/Contents/MacOS/ShiftInput
-          codesign --verify --deep --strict dist/ShiftInput.app
-          hdiutil verify "dist/ShiftInput-${VERSION}.dmg"
+          lipo -archs dist/ShiftIME.app/Contents/MacOS/ShiftIME
+          codesign --verify --deep --strict dist/ShiftIME.app
+          hdiutil verify "dist/ShiftIME-${VERSION}.dmg"
 
       - name: Upload DMG
         uses: actions/upload-artifact@v7
         with:
-          name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
-          path: dist/ShiftInput-${{ needs.metadata.outputs.version }}.dmg
+          name: ShiftIME-${{ needs.metadata.outputs.version }}-macOS
+          path: dist/ShiftIME-${{ needs.metadata.outputs.version }}.dmg
           if-no-files-found: error
 
   release:
@@ -102,7 +102,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: shiftinput-release
+      group: shiftime-release
       cancel-in-progress: false
 
     steps:
@@ -114,7 +114,7 @@ jobs:
       - name: Download DMG
         uses: actions/download-artifact@v8
         with:
-          name: ShiftInput-${{ needs.metadata.outputs.version }}-macOS
+          name: ShiftIME-${{ needs.metadata.outputs.version }}-macOS
           path: dist
 
       - name: Generate release notes from every commit
@@ -157,8 +157,8 @@ jobs:
         shell: bash
         run: |
           gh release create "$TAG" \
-            "dist/ShiftInput-${VERSION}.dmg" \
+            "dist/ShiftIME-${VERSION}.dmg" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "ShiftInput $TAG" \
+            --title "ShiftIME $TAG" \
             --notes-file release-notes.md

@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureCallbacks()
 
         NotificationCenter.default.addObserver(
-            forName: .shiftInputSettingsDidChange,
+            forName: .shiftIMESettingsDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -131,14 +131,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
         let applicationItem = NSMenuItem()
         let applicationMenu = NSMenu()
-        applicationMenu.addItem(withTitle: "關於 ShiftInput", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        applicationMenu.addItem(withTitle: "關於 ShiftIME", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         applicationMenu.addItem(.separator())
         let preferencesItem = NSMenuItem(title: "設定…", action: #selector(openPreferencesFromMenu), keyEquivalent: ",")
         preferencesItem.target = self
         applicationMenu.addItem(preferencesItem)
         applicationMenu.addItem(.separator())
-        applicationMenu.addItem(withTitle: "隱藏 ShiftInput", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        applicationMenu.addItem(withTitle: "結束 ShiftInput", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        applicationMenu.addItem(withTitle: "隱藏 ShiftIME", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        applicationMenu.addItem(withTitle: "結束 ShiftIME", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         applicationItem.submenu = applicationMenu
         mainMenu.addItem(applicationItem)
         NSApp.mainMenu = mainMenu

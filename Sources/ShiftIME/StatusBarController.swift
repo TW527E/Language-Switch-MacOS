@@ -38,7 +38,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func updateButton() {
         guard let button = statusItem?.button else { return }
-        let description = "ShiftInput，目前輸入法：\(currentSource.name)"
+        let description = "ShiftIME，目前輸入法：\(currentSource.name)"
         let icon = NSImage(systemSymbolName: "character.cursor.ibeam", accessibilityDescription: description)
             ?? NSImage(systemSymbolName: "keyboard", accessibilityDescription: description)
         icon?.isTemplate = true
@@ -46,7 +46,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         button.imagePosition = .imageLeading
         button.title = " \(currentSource.shortLabel)"
         button.font = .systemFont(ofSize: 13, weight: .semibold)
-        button.toolTip = "ShiftInput · \(currentSource.name)"
+        button.toolTip = "ShiftIME · \(currentSource.name)"
         button.setAccessibilityLabel(description)
     }
 
@@ -65,7 +65,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item("設定…", #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(withTitle: "結束 ShiftInput", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "結束 ShiftIME", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     private func currentAppBypassItem() -> NSMenuItem {

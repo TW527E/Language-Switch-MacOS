@@ -7,8 +7,8 @@ VERSION="${VERSION:-$(tr -d '[:space:]' < "$ROOT/VERSION")}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 BUILD_ARCHS="${BUILD_ARCHS:-}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
-APP_NAME="ShiftInput"
-BUNDLE_ID="com.tw527e.ShiftInput"
+APP_NAME="ShiftIME"
+BUNDLE_ID="com.tw527e.ShiftIME"
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
 
@@ -44,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
-    <key>NSAccessibilityUsageDescription</key><string>ShiftInput 需要監聽 Shift 快捷鍵以切換輸入法。</string>
-    <key>NSInputMonitoringUsageDescription</key><string>ShiftInput 需要讀取 Shift 快捷鍵以切換輸入法。</string>
+    <key>NSAccessibilityUsageDescription</key><string>ShiftIME 需要監聽 Shift 快捷鍵以切換輸入法。</string>
+    <key>NSInputMonitoringUsageDescription</key><string>ShiftIME 需要讀取 Shift 快捷鍵以切換輸入法。</string>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026</string>
 </dict>
 </plist>

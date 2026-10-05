@@ -1,5 +1,5 @@
 import AppKit
-import ShiftInputCore
+import ShiftIMECore
 
 struct ForegroundApplicationInfo {
     let bundleIdentifier: String

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Recognizes remote-desktop apps and games, where ShiftInput shortcuts are
+/// Recognizes remote-desktop apps and games, where ShiftIME shortcuts are
 /// left untouched by default.
 ///
 /// The policy intentionally uses stable application metadata instead of polling

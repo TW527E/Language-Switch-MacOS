@@ -34,7 +34,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
             backing: .buffered,
             defer: false
         )
-        window.title = "ShiftInput 設定"
+        window.title = "ShiftIME 設定"
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
@@ -76,7 +76,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     private func buildUI(in window: NSWindow) {
         guard let content = window.contentView else { return }
 
-        let title = NSTextField(labelWithString: "ShiftInput")
+        let title = NSTextField(labelWithString: "ShiftIME")
         title.font = .systemFont(ofSize: 24, weight: .semibold)
         let subtitle = NSTextField(wrappingLabelWithString: "兩項快捷鍵可獨立啟用。Shift 用於輸入法切換；Shift + Space 僅用於 Apple 拼音輸入法的全形／半形切換。")
         subtitle.textColor = .secondaryLabelColor
@@ -90,7 +90,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         permissionButton.action = #selector(retryPermission)
         permissionButton.bezelStyle = .rounded
 
-        let visibilityNote = NSTextField(wrappingLabelWithString: "若同時隱藏選單列與 Dock 圖標，可再次從 Finder 開啟 ShiftInput 以回到設定。")
+        let visibilityNote = NSTextField(wrappingLabelWithString: "若同時隱藏選單列與 Dock 圖標，可再次從 Finder 開啟 ShiftIME 以回到設定。")
         visibilityNote.font = .systemFont(ofSize: 12)
         visibilityNote.textColor = .tertiaryLabelColor
 

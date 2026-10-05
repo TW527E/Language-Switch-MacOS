@@ -3,14 +3,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "ShiftInput",
+    name: "ShiftIME",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "ShiftInput", targets: ["ShiftInput"])
+        .executable(name: "ShiftIME", targets: ["ShiftIME"])
     ],
     targets: [
-        .target(name: "ShiftInputCore"),
-        .executableTarget(name: "ShiftInput", dependencies: ["ShiftInputCore"])
+        .target(name: "ShiftIMECore"),
+        .executableTarget(name: "ShiftIME", dependencies: ["ShiftIMECore"])
     ],
     swiftLanguageModes: [.v5]
 )
