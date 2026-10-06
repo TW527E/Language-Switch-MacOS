@@ -6,6 +6,8 @@
 
 **像 Windows 一样，在 Mac 上单按 `Shift` 切换中英文。** [下载最新版本](https://github.com/TW527E/ShiftIME/releases/latest)
 
+<p align="center"><img src="docs/demo-pinyin.webp" width="720" alt="在微信中单按 Shift 切换拼音和英文"></p>
+
 ShiftIME 是一个原生、轻量且事件驱动的 macOS 输入法切换增强工具。它在后台运行，默认显示于菜单栏且不显示于 Dock。
 
 ## 功能

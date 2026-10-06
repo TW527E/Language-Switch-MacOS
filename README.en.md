@@ -6,6 +6,8 @@
 
 **Tap `Shift` to switch between Chinese and English on your Mac, just like on Windows.** [Download the latest release](https://github.com/TW527E/ShiftIME/releases/latest)
 
+<p align="center"><img src="docs/demo-pinyin.webp" width="720" alt="Tapping Shift to switch between Pinyin and English in WeChat"></p>
+
 ShiftIME is a lightweight, event-driven, native macOS enhancement for switching input sources. It runs in the background, appears in the menu bar by default, and stays out of the Dock by default.
 
 ## Features

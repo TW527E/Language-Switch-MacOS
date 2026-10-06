@@ -6,6 +6,8 @@
 
 **像 Windows 一樣，在 Mac 上單按 `Shift` 切換中英文。** [下載最新版本](https://github.com/TW527E/ShiftIME/releases/latest)
 
+<p align="center"><img src="docs/demo-zhuyin.webp" width="600" alt="在 Discord 中單按 Shift 切換注音和英文"></p>
+
 ShiftIME 是一個原生、輕量且事件驅動的 macOS 輸入法切換增強工具。它在背景執行，預設顯示於選單列且不顯示於 Dock。
 
 ## 功能
