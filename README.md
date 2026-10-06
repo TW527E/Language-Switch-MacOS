@@ -133,3 +133,7 @@ Scripts/StateMachineChecks.swift 状态机与拼音识别检查
 Makefile
 Package.swift
 ```
+
+## 许可证
+
+[MIT](LICENSE)

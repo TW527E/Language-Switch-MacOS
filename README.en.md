@@ -133,3 +133,7 @@ Scripts/StateMachineChecks.swift State-machine and Pinyin classification checks
 Makefile
 Package.swift
 ```
+
+## License
+
+[MIT](LICENSE)
