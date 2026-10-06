@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE="${1:-$ROOT/Resources/AppIcon.png}"
 OUTPUT="${2:-$ROOT/dist/AppIcon.icns}"
-ICONSET="$(mktemp -d "${TMPDIR:-/tmp}/shiftinput-icon.XXXXXX")/AppIcon.iconset"
+ICONSET="$(mktemp -d "${TMPDIR:-/tmp}/shiftime-icon.XXXXXX")/AppIcon.iconset"
 
 cleanup() {
     rm -rf "$(dirname "$ICONSET")"

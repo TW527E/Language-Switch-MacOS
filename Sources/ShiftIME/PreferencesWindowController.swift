@@ -12,20 +12,29 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     private var excludedBundleIDs: [String] = []
     private let addExcludedAppButton = NSButton(title: "加入 App…", target: nil, action: nil)
     private let removeExcludedAppButton = NSButton(title: "移除", target: nil, action: nil)
+    private let centerHUDFallbackButton = NSButton(checkboxWithTitle: "macOS 未在游標旁顯示輸入法提示時，改在螢幕中央顯示", target: nil, action: nil)
     private let statusItemButton = NSButton(checkboxWithTitle: "在選單列顯示圖標", target: nil, action: nil)
     private let dockIconButton = NSButton(checkboxWithTitle: "在 Dock 顯示圖標", target: nil, action: nil)
     private let permissionStatus = NSTextField(labelWithString: "")
     private let permissionButton = NSButton(title: "授予／重新檢查權限", target: nil, action: nil)
+    private lazy var toggles: [(button: NSButton, keyPath: ReferenceWritableKeyPath<SettingsStore, Bool>)] = [
+        (shiftToggleButton, \.shiftToggleEnabled),
+        (pinyinWidthToggleButton, \.pinyinWidthToggleEnabled),
+        (automaticBypassButton, \.automaticallyBypassRemoteAppsAndGames),
+        (centerHUDFallbackButton, \.showCenterHUDAsFallback),
+        (statusItemButton, \.showStatusItem),
+        (dockIconButton, \.showDockIcon)
+    ]
 
     init(settings: SettingsStore) {
         self.settings = settings
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 650),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 680),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "ShiftInput 設定"
+        window.title = "ShiftIME 設定"
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
@@ -39,20 +48,23 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     }
 
     func showAndActivate() {
-        refresh()
         showWindow(nil)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Permissions change in System Settings, so the window rechecks them
+    /// whenever the user comes back to it.
+    func windowDidBecomeKey(_ notification: Notification) {
+        refresh()
+    }
+
     func refresh() {
-        shiftToggleButton.state = settings.shiftToggleEnabled ? .on : .off
-        pinyinWidthToggleButton.state = settings.pinyinWidthToggleEnabled ? .on : .off
-        automaticBypassButton.state = settings.automaticallyBypassRemoteAppsAndGames ? .on : .off
+        for toggle in toggles {
+            toggle.button.state = settings[keyPath: toggle.keyPath] ? .on : .off
+        }
         refreshExcludedApps()
-        statusItemButton.state = settings.showStatusItem ? .on : .off
-        dockIconButton.state = settings.showDockIcon ? .on : .off
         let status = AccessibilityPermission.status
         let granted = status.isFullyGranted
         permissionStatus.stringValue = granted
@@ -64,21 +76,21 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     private func buildUI(in window: NSWindow) {
         guard let content = window.contentView else { return }
 
-        let title = NSTextField(labelWithString: "ShiftInput")
+        let title = NSTextField(labelWithString: "ShiftIME")
         title.font = .systemFont(ofSize: 24, weight: .semibold)
         let subtitle = NSTextField(wrappingLabelWithString: "兩項快捷鍵可獨立啟用。Shift 用於輸入法切換；Shift + Space 僅用於 Apple 拼音輸入法的全形／半形切換。")
         subtitle.textColor = .secondaryLabelColor
 
-        [shiftToggleButton, pinyinWidthToggleButton, automaticBypassButton, statusItemButton, dockIconButton].forEach {
-            $0.target = self
-            $0.action = #selector(settingChanged(_:))
+        for toggle in toggles {
+            toggle.button.target = self
+            toggle.button.action = #selector(settingChanged(_:))
         }
         permissionStatus.font = .systemFont(ofSize: 13, weight: .medium)
         permissionButton.target = self
         permissionButton.action = #selector(retryPermission)
         permissionButton.bezelStyle = .rounded
 
-        let visibilityNote = NSTextField(wrappingLabelWithString: "若同時隱藏選單列與 Dock 圖標，可再次從 Finder 開啟 ShiftInput 以回到設定。")
+        let visibilityNote = NSTextField(wrappingLabelWithString: "若同時隱藏選單列與 Dock 圖標，可再次從 Finder 開啟 ShiftIME 以回到設定。")
         visibilityNote.font = .systemFont(ofSize: 12)
         visibilityNote.textColor = .tertiaryLabelColor
 
@@ -94,18 +106,12 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         bypassNote.textColor = .secondaryLabelColor
         let excludedAppsTitle = NSTextField(labelWithString: "應用程式列表")
         excludedAppsTitle.font = .systemFont(ofSize: 12, weight: .medium)
-        let appColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("application"))
-        appColumn.title = "應用程式"
-        appColumn.width = 230
-        let shiftColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("shift"))
-        shiftColumn.title = "Shift"
-        shiftColumn.width = 90
-        let shiftSpaceColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("shiftSpace"))
-        shiftSpaceColumn.title = "Shift + Space"
-        shiftSpaceColumn.width = 125
-        excludedAppsTable.addTableColumn(appColumn)
-        excludedAppsTable.addTableColumn(shiftColumn)
-        excludedAppsTable.addTableColumn(shiftSpaceColumn)
+        for (identifier, title, width) in [("application", "應用程式", 230.0), ("shift", "Shift", 90), ("shiftSpace", "Shift + Space", 125)] {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
+            column.title = title
+            column.width = width
+            excludedAppsTable.addTableColumn(column)
+        }
         excludedAppsTable.delegate = self
         excludedAppsTable.dataSource = self
         excludedAppsTable.usesAlternatingRowBackgroundColors = true
@@ -129,7 +135,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
 
         let stack = NSStackView(views: [
             title, subtitle, separator(), shiftToggleButton, pinyinWidthToggleButton,
-            shortcutTitle, shortcuts, separator(), bypassTitle, automaticBypassButton,
+            shortcutTitle, shortcuts, centerHUDFallbackButton, separator(), bypassTitle, automaticBypassButton,
             bypassNote, excludedAppsTitle, excludedAppsScrollView, excludedAppControls, separator(), statusItemButton,
             dockIconButton, visibilityNote, separator(), permissionStatus,
             permissionButton
@@ -140,11 +146,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
 
-        subtitle.widthAnchor.constraint(equalToConstant: 456).isActive = true
-        visibilityNote.widthAnchor.constraint(equalToConstant: 456).isActive = true
-        bypassNote.widthAnchor.constraint(equalToConstant: 456).isActive = true
-        stack.arrangedSubviews.compactMap { $0 as? NSBox }.forEach {
-            $0.widthAnchor.constraint(equalToConstant: 456).isActive = true
+        for view in [subtitle, visibilityNote, bypassNote] + stack.arrangedSubviews.filter({ $0 is NSBox }) {
+            view.widthAnchor.constraint(equalToConstant: 456).isActive = true
         }
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 32),
@@ -160,20 +163,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     }
 
     @objc private func settingChanged(_ sender: NSButton) {
-        switch sender {
-        case shiftToggleButton:
-            settings.shiftToggleEnabled = sender.state == .on
-        case pinyinWidthToggleButton:
-            settings.pinyinWidthToggleEnabled = sender.state == .on
-        case automaticBypassButton:
-            settings.automaticallyBypassRemoteAppsAndGames = sender.state == .on
-        case statusItemButton:
-            settings.showStatusItem = sender.state == .on
-        case dockIconButton:
-            settings.showDockIcon = sender.state == .on
-        default:
-            break
-        }
+        guard let keyPath = toggles.first(where: { $0.button === sender })?.keyPath else { return }
+        settings[keyPath: keyPath] = sender.state == .on
     }
 
     @objc private func retryPermission() {
@@ -194,7 +185,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
             guard response == .OK,
                   let url = panel.url,
                   let bundleIdentifier = Bundle(url: url)?.bundleIdentifier else { return }
-            self?.settings.addExcludedApplication(bundleIdentifier: bundleIdentifier)
+            self?.settings.setBypassed(true, bundleIdentifier: bundleIdentifier)
             self?.refresh()
             if let row = self?.excludedBundleIDs.firstIndex(of: bundleIdentifier) {
                 self?.excludedAppsTable.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
@@ -205,8 +196,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     @objc private func removeExcludedApp() {
         let row = excludedAppsTable.selectedRow
         guard excludedBundleIDs.indices.contains(row) else { return }
-        settings.removeExcludedApplication(bundleIdentifier: excludedBundleIDs[row])
-        refresh()
+        settings.setBypassed(false, bundleIdentifier: excludedBundleIDs[row])
     }
 
     private func refreshExcludedApps() {
@@ -222,59 +212,42 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard excludedBundleIDs.indices.contains(row), let tableColumn else { return nil }
+        guard excludedBundleIDs.indices.contains(row) else { return nil }
         let bundleIdentifier = excludedBundleIDs[row]
-        switch tableColumn.identifier.rawValue {
-        case "application":
+        guard let keyPath = bypassKeyPath(for: tableColumn) else {
             let label = NSTextField(labelWithString: displayName(for: bundleIdentifier))
             label.lineBreakMode = .byTruncatingTail
             label.toolTip = bundleIdentifier
             return label
-        case "shift":
-            return bypassButton(
-                title: "放行",
-                bundleIdentifier: bundleIdentifier,
-                isOn: settings.shiftExcludedBundleIDs.contains(bundleIdentifier),
-                tag: 1
-            )
-        case "shiftSpace":
-            return bypassButton(
-                title: "放行",
-                bundleIdentifier: bundleIdentifier,
-                isOn: settings.pinyinWidthExcludedBundleIDs.contains(bundleIdentifier),
-                tag: 2
-            )
-        default:
-            return nil
         }
+        let button = NSButton(checkboxWithTitle: "放行", target: self, action: #selector(shortcutBypassChanged(_:)))
+        button.state = settings[keyPath: keyPath].contains(bundleIdentifier) ? .on : .off
+        return button
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         removeExcludedAppButton.isEnabled = excludedAppsTable.selectedRow >= 0
     }
 
-    private func bypassButton(
-        title: String,
-        bundleIdentifier: String,
-        isOn: Bool,
-        tag: Int
-    ) -> NSButton {
-        let button = NSButton(checkboxWithTitle: title, target: self, action: #selector(shortcutBypassChanged(_:)))
-        button.identifier = NSUserInterfaceItemIdentifier(bundleIdentifier)
-        button.state = isOn ? .on : .off
-        button.tag = tag
-        return button
+    private func bypassKeyPath(for column: NSTableColumn?) -> ReferenceWritableKeyPath<SettingsStore, Set<String>>? {
+        switch column?.identifier.rawValue {
+        case "shift": return \.shiftExcludedBundleIDs
+        case "shiftSpace": return \.pinyinWidthExcludedBundleIDs
+        default: return nil
+        }
     }
 
     @objc private func shortcutBypassChanged(_ sender: NSButton) {
-        guard let bundleIdentifier = sender.identifier?.rawValue else { return }
-        let excluded = sender.state == .on
-        if sender.tag == 1 {
-            settings.setShiftExcluded(excluded, bundleIdentifier: bundleIdentifier)
-        } else if sender.tag == 2 {
-            settings.setPinyinWidthExcluded(excluded, bundleIdentifier: bundleIdentifier)
+        let row = excludedAppsTable.row(for: sender)
+        let column = excludedAppsTable.column(for: sender)
+        guard excludedBundleIDs.indices.contains(row),
+              excludedAppsTable.tableColumns.indices.contains(column),
+              let keyPath = bypassKeyPath(for: excludedAppsTable.tableColumns[column]) else { return }
+        if sender.state == .on {
+            settings[keyPath: keyPath].insert(excludedBundleIDs[row])
+        } else {
+            settings[keyPath: keyPath].remove(excludedBundleIDs[row])
         }
-        refresh()
     }
 
     private func displayName(for bundleIdentifier: String) -> String {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/dist/ShiftInput.app"
+APP="$ROOT/dist/ShiftIME.app"
 
 if [[ ! -d "$APP" ]]; then
     echo "Missing app bundle: run make app first" >&2
@@ -18,13 +18,13 @@ open -n "$APP" --args \
 
 PID=""
 for _ in {1..20}; do
-    PID="$(pgrep -nx ShiftInput || true)"
+    PID="$(pgrep -nx ShiftIME || true)"
     [[ -n "$PID" ]] && break
     sleep 0.1
 done
 
 if [[ -z "$PID" ]]; then
-    echo "ShiftInput did not enter its application run loop" >&2
+    echo "ShiftIME did not enter its application run loop" >&2
     exit 1
 fi
 

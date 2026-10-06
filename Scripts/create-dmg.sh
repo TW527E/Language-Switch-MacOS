@@ -2,12 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="ShiftInput"
+APP_NAME="ShiftIME"
 VERSION="${VERSION:-$(tr -d '[:space:]' < "$ROOT/VERSION")}"
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
 DMG="$DIST/$APP_NAME-$VERSION.dmg"
-STAGING="$(mktemp -d "${TMPDIR:-/tmp}/shiftinput-dmg.XXXXXX")"
+STAGING="$(mktemp -d "${TMPDIR:-/tmp}/shiftime-dmg.XXXXXX")"
 
 cleanup() {
     rm -rf "$STAGING"
