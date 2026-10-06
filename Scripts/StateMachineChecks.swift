@@ -130,6 +130,12 @@ enum StateMachineChecks {
             applicationCategory: nil
         ), "known remote desktop apps are automatically bypassed")
         expect(ApplicationBypassPolicy.isAutomaticallyBypassed(
+            bundleIdentifier: "com.netease.uuremote",
+            localizedName: "UU远程",
+            bundlePath: "/Applications/UURemote.app",
+            applicationCategory: nil
+        ), "UU Remote is automatically bypassed")
+        expect(ApplicationBypassPolicy.isAutomaticallyBypassed(
             bundleIdentifier: "com.example.game",
             localizedName: "Example Game",
             bundlePath: "/Users/test/Library/Application Support/Steam/steamapps/common/Example/Example.app",

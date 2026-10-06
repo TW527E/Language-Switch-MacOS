@@ -21,6 +21,7 @@ public enum ApplicationBypassPolicy {
         "steamlink",
         "teamviewer",
         "todesk",
+        "uuremote",
         "vncviewer"
     ]
 
