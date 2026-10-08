@@ -101,7 +101,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
 
         let bypassTitle = NSTextField(labelWithString: "應用程式快捷鍵放行")
         bypassTitle.font = .systemFont(ofSize: 13, weight: .semibold)
-        let bypassNote = NSTextField(wrappingLabelWithString: "可分別決定每個 App 是否略過 Shift 輸入法切換及 Shift + Space 全／半形切換。新加入的 App 預設兩項都放行。自動模式會對常見遠端軟體及遊戲放行兩項快捷鍵。")
+        let bypassNote = NSTextField(wrappingLabelWithString: "可分別決定每個 App 是否略過 Shift 輸入法切換及 Shift + Space 全／半形切換。新加入的 App 預設兩項都放行。自動模式會對常見遠端軟體及遊戲放行兩項快捷鍵。Minecraft 等 Java 遊戲沒有 App 檔，請在遊戲執行時從選單列圖標加入。")
         bypassNote.font = .systemFont(ofSize: 12)
         bypassNote.textColor = .secondaryLabelColor
         let excludedAppsTitle = NSTextField(labelWithString: "應用程式列表")
@@ -216,7 +216,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, N
         let bundleIdentifier = excludedBundleIDs[row]
         guard let keyPath = bypassKeyPath(for: tableColumn) else {
             let label = NSTextField(labelWithString: displayName(for: bundleIdentifier))
-            label.lineBreakMode = .byTruncatingTail
+            // Middle truncation keeps both ends of executable paths readable.
+            label.lineBreakMode = .byTruncatingMiddle
             label.toolTip = bundleIdentifier
             return label
         }
