@@ -2,13 +2,15 @@ import AppKit
 import ShiftIMECore
 
 struct ForegroundApplicationInfo {
+    /// The bundle ID, or the executable path for bundle-less processes such as
+    /// Java games (Minecraft runs as a bare `java` binary).
     let bundleIdentifier: String
     let localizedName: String
     /// Classified once per activation so the event tap only reads a Bool.
     let isRemoteOrGame: Bool
 
     init?(runningApplication: NSRunningApplication) {
-        guard let bundleIdentifier = runningApplication.bundleIdentifier,
+        guard let bundleIdentifier = runningApplication.bundleIdentifier ?? runningApplication.executableURL?.path,
               bundleIdentifier != Bundle.main.bundleIdentifier else {
             return nil
         }
